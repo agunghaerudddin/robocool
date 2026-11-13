@@ -1,9 +1,12 @@
-import Image from "next/image";
+import { createSupabaseServerClient } from "@/lib/supabase/server-client";
+import LoginDemo from "./login/LoginPage";
 
-export default function Home() {
-  return (
-    <div>
-      <div>Ommaleka</div>
-    </div>
-  );
+export default async function LoginPage() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  console.log({ user });
+  return <LoginDemo user={user} />;
 }
