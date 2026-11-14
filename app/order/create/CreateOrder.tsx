@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 type ServiceItem = {
   service_id: string;
+  unitId: string;
   brand: string;
   pk: string;
   unit_type: string;
@@ -18,7 +19,13 @@ type SparepartItem = {
   amount: number;
   price: number;
   capital_price: number;
-  warranty: string;
+};
+
+type OtherCostItem = {
+  information: string;
+  amount: number;
+  price: number;
+  capital_price: number;
 };
 
 type ProductItem = {
@@ -26,6 +33,14 @@ type ProductItem = {
   amount: number;
   price: number;
   capital_price: number;
+};
+
+type UnitItem = {
+  id: string;
+  brand: string;
+  pk: string;
+  unit_type: string;
+  location: string;
 };
 
 const inputClass =
@@ -90,6 +105,15 @@ export default function CreateOrderPage() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [googleMaps, setGoogleMaps] = useState("");
+  const [units, setUnits] = useState<UnitItem[]>([
+    {
+      id: "unit-1",
+      brand: "Daikin",
+      pk: "1",
+      unit_type: "AC Split",
+      location: "Ruang tamu",
+    },
+  ]);
 
   const [status, setStatus] = useState("pending");
   const [paymentType, setPaymentType] = useState("cash");
@@ -97,10 +121,12 @@ export default function CreateOrderPage() {
   const [commissionMode, setCommissionMode] = useState("percentage");
   const [commission, setCommission] = useState(0);
   const [discount, setDiscount] = useState(0);
+  const [newUnitId, setNewUnitId] = useState<number | null>(null);
 
   const [services, setServices] = useState<ServiceItem[]>([
     {
       service_id: "",
+      unitId: "",
       brand: "",
       pk: "",
       unit_type: "AC Split",
@@ -112,6 +138,7 @@ export default function CreateOrderPage() {
   ]);
 
   const [spareparts, setSpareparts] = useState<SparepartItem[]>([]);
+  const [otherCost, setOtherCost] = useState<OtherCostItem[]>([]);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
@@ -156,6 +183,17 @@ export default function CreateOrderPage() {
     );
   };
 
+  const updateOtherCost = (
+    index: number,
+    field: keyof OtherCostItem,
+    value: string | number,
+  ) => {
+    setOtherCost((current) =>
+      current.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item,
+      ),
+    );
+  };
   const updateSparepart = (
     index: number,
     field: keyof SparepartItem,
@@ -359,147 +397,392 @@ export default function CreateOrderPage() {
             </Section>
 
             {/* SERVICES */}
+
             <Section number="2" title="Jasa">
               <div className="space-y-4">
-                {services.map((item, index) => (
-                  <div
-                    key={index}
-                    className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 sm:p-4"
-                  >
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                        Jasa {index + 1}
-                      </span>
-                      <button
-                        type="button"
-                        className="text-xs text-rose-600 hover:underline"
-                        onClick={() =>
-                          setServices((current) =>
-                            current.filter((_, i) => i !== index),
-                          )
-                        }
-                      >
-                        Hapus
-                      </button>
-                    </div>
+                {services.map((item, index) => {
+                  const selectedUnit = units.find(
+                    (unit) => unit.id === item.unitId,
+                  );
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <Field label="Jenis layanan">
-                        <input
-                          className={inputClass}
-                          value={item.service_id}
-                          onChange={(e) =>
-                            updateService(index, "service_id", e.target.value)
-                          }
-                          placeholder="ID layanan"
-                        />
-                      </Field>
-                      <Field label="Jenis unit">
-                        <select
-                          className={inputClass}
-                          value={item.unit_type}
-                          onChange={(e) =>
-                            updateService(index, "unit_type", e.target.value)
-                          }
-                        >
-                          <option>AC Split</option>
-                          <option>AC Cassette</option>
-                          <option>AC Standing</option>
-                          <option>AC Central</option>
-                          <option>Lainnya</option>
-                        </select>
-                      </Field>
-                      <Field label="Merek AC">
-                        <input
-                          className={inputClass}
-                          value={item.brand}
-                          onChange={(e) =>
-                            updateService(index, "brand", e.target.value)
-                          }
-                          placeholder="Daikin, Gree..."
-                        />
-                      </Field>
-                      <Field label="PK">
-                        <select
-                          className={inputClass}
-                          value={item.pk}
-                          onChange={(e) =>
-                            updateService(index, "pk", e.target.value)
-                          }
-                        >
-                          <option value="">Pilih PK</option>
-                          <option>0.5</option>
-                          <option>0.75</option>
-                          <option>1</option>
-                          <option>1.5</option>
-                          <option>2</option>
-                          <option>2.5</option>
-                          <option>3</option>
-                        </select>
-                      </Field>
-                    </div>
+                  const isCreatingUnit = newUnitId === index;
 
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <Field label="Lokasi unit">
-                        <input
-                          className={inputClass}
-                          value={item.location}
-                          onChange={(e) =>
-                            updateService(index, "location", e.target.value)
-                          }
-                          placeholder="Ruang tamu"
-                        />
-                      </Field>
-                      <Field label="Jumlah">
-                        <input
-                          className={inputClass}
-                          type="number"
-                          min="1"
-                          value={item.amount}
-                          onChange={(e) =>
-                            updateService(
-                              index,
-                              "amount",
-                              Math.max(1, Number(e.target.value)),
-                            )
-                          }
-                        />
-                      </Field>
-                      <Field label="Harga jasa (Rp)">
-                        <input
-                          className={inputClass}
-                          type="number"
-                          min="0"
-                          value={item.price}
-                          onChange={(e) =>
-                            updateService(
-                              index,
-                              "price",
-                              Math.max(0, Number(e.target.value)),
-                            )
-                          }
-                        />
-                      </Field>
-                      <Field label="Garansi">
-                        <input
-                          className={inputClass}
-                          value={item.warranty}
-                          onChange={(e) =>
-                            updateService(index, "warranty", e.target.value)
-                          }
-                          placeholder="30 hari"
-                        />
-                      </Field>
-                    </div>
+                  return (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4"
+                    >
+                      {/* Card header */}
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                          Jasa
+                        </span>
 
-                    <div className="mt-3 flex justify-end text-xs text-slate-500">
-                      Subtotal:{" "}
-                      <strong className="ml-2 text-slate-800">
-                        {money(item.amount * item.price)}
-                      </strong>
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            className="text-xs text-blue-600 hover:underline"
+                            onClick={() =>
+                              setServices((current) => [
+                                ...current,
+                                { ...item, unitId: "" },
+                              ])
+                            }
+                          >
+                            Duplikat
+                          </button>
+
+                          <button
+                            type="button"
+                            className="text-xs text-rose-600 hover:underline"
+                            onClick={() => {
+                              setServices((current) =>
+                                current.filter((_, i) => i !== index),
+                              );
+
+                              setNewUnitId((current) =>
+                                current === index
+                                  ? null
+                                  : current !== null && current > index
+                                    ? current - 1
+                                    : current,
+                              );
+                            }}
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Main row */}
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)_minmax(0,1.5fr)]">
+                        <Field label="Unit AC pelanggan">
+                          <select
+                            className={inputClass}
+                            value={isCreatingUnit ? "__new__" : item.unitId}
+                            onChange={(e) => {
+                              const unitId = e.target.value;
+
+                              if (unitId === "__new__") return;
+
+                              const unit = units.find((u) => u.id === unitId);
+
+                              setNewUnitId(null);
+
+                              setServices((current) =>
+                                current.map((service, i) =>
+                                  i === index
+                                    ? {
+                                        ...service,
+                                        unitId,
+                                        brand: unit?.brand ?? "",
+                                        pk: unit?.pk ?? "",
+                                        unit_type:
+                                          unit?.unit_type ?? "Split Wall",
+                                        location: unit?.location ?? "",
+                                      }
+                                    : service,
+                                ),
+                              );
+                            }}
+                          >
+                            <option value="">— Tanpa unit —</option>
+
+                            {isCreatingUnit && (
+                              <option value="__new__">+ Unit baru</option>
+                            )}
+
+                            {units.map((unit) => (
+                              <option key={unit.id} value={unit.id}>
+                                {unit.brand || "Tanpa merek"}{" "}
+                                {unit.pk ? `${unit.pk} PK` : ""} —{" "}
+                                {unit.location || "Tanpa lokasi"}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            className="w-full whitespace-nowrap rounded-md border border-slate-200 px-3 py-2 text-xs font-medium hover:bg-slate-50 sm:w-auto"
+                            onClick={() => {
+                              const id = crypto.randomUUID();
+
+                              setUnits((current) => [
+                                ...current,
+                                {
+                                  id,
+                                  brand: "",
+                                  pk: "1",
+                                  unit_type: "Split Wall",
+                                  location: "",
+                                },
+                              ]);
+
+                              setServices((current) =>
+                                current.map((service, i) =>
+                                  i === index
+                                    ? {
+                                        ...service,
+                                        unitId: id,
+                                        brand: "",
+                                        pk: "1",
+                                        unit_type: "Split Wall",
+                                        location: "",
+                                      }
+                                    : service,
+                                ),
+                              );
+
+                              setNewUnitId(index);
+                            }}
+                          >
+                            + Unit
+                          </button>
+                        </div>
+
+                        <Field label="Merek AC">
+                          <input
+                            className={inputClass}
+                            value={selectedUnit?.brand ?? item.brand}
+                            onChange={(e) => {
+                              const value = e.target.value;
+
+                              updateService(index, "brand", value);
+
+                              if (item.unitId) {
+                                setUnits((current) =>
+                                  current.map((unit) =>
+                                    unit.id === item.unitId
+                                      ? { ...unit, brand: value }
+                                      : unit,
+                                  ),
+                                );
+                              }
+                            }}
+                            placeholder="Daikin, Sharp..."
+                          />
+                        </Field>
+
+                        <Field label="Layanan">
+                          <select
+                            className={inputClass}
+                            value={item.service_id}
+                            onChange={(e) =>
+                              updateService(index, "service_id", e.target.value)
+                            }
+                          >
+                            <option value="">— Pilih layanan —</option>
+                            <option value="service-1">Cuci AC</option>
+                            <option value="service-2">Perbaikan AC</option>
+                            <option value="service-3">Tambah Freon</option>
+                            <option value="service-4">Pasang AC</option>
+                          </select>
+                        </Field>
+                      </div>
+
+                      {/* New unit editor */}
+                      {item.unitId && isCreatingUnit && (
+                        <div className="mt-3 rounded-md border border-blue-100 bg-blue-50/70 p-3">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-xs font-semibold text-blue-800">
+                              Unit AC baru — tersimpan ke data pelanggan
+                            </p>
+
+                            <button
+                              type="button"
+                              className="text-xs text-rose-600 hover:underline"
+                              onClick={() => {
+                                const id = item.unitId;
+
+                                setUnits((current) =>
+                                  current.filter((unit) => unit.id !== id),
+                                );
+
+                                setServices((current) =>
+                                  current.map((service, i) =>
+                                    i === index
+                                      ? {
+                                          ...service,
+                                          unitId: "",
+                                          brand: "",
+                                          pk: "",
+                                          unit_type: "Split Wall",
+                                          location: "",
+                                        }
+                                      : service,
+                                  ),
+                                );
+
+                                setNewUnitId(null);
+                              }}
+                            >
+                              Batal
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <Field label="Merek">
+                              <input
+                                className={inputClass}
+                                value={selectedUnit?.brand ?? ""}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+
+                                  updateService(index, "brand", value);
+
+                                  setUnits((current) =>
+                                    current.map((unit) =>
+                                      unit.id === item.unitId
+                                        ? { ...unit, brand: value }
+                                        : unit,
+                                    ),
+                                  );
+                                }}
+                                placeholder="Daikin"
+                              />
+                            </Field>
+
+                            <Field label="PK">
+                              <select
+                                className={inputClass}
+                                value={selectedUnit?.pk ?? item.pk}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+
+                                  updateService(index, "pk", value);
+
+                                  setUnits((current) =>
+                                    current.map((unit) =>
+                                      unit.id === item.unitId
+                                        ? { ...unit, pk: value }
+                                        : unit,
+                                    ),
+                                  );
+                                }}
+                              >
+                                <option value="">Pilih PK</option>
+                                <option value="0.5">0.5 PK</option>
+                                <option value="0.75">0.75 PK</option>
+                                <option value="1">1 PK</option>
+                                <option value="1.5">1.5 PK</option>
+                                <option value="2">2 PK</option>
+                                <option value="2.5">2.5 PK</option>
+                                <option value="3">3 PK</option>
+                              </select>
+                            </Field>
+
+                            <Field label="Tipe">
+                              <select
+                                className={inputClass}
+                                value={
+                                  selectedUnit?.unit_type ?? item.unit_type
+                                }
+                                onChange={(e) => {
+                                  const value = e.target.value;
+
+                                  updateService(index, "unit_type", value);
+
+                                  setUnits((current) =>
+                                    current.map((unit) =>
+                                      unit.id === item.unitId
+                                        ? { ...unit, unit_type: value }
+                                        : unit,
+                                    ),
+                                  );
+                                }}
+                              >
+                                <option value="Split Wall">Split Wall</option>
+                                <option value="AC Cassette">AC Cassette</option>
+                                <option value="AC Standing">AC Standing</option>
+                                <option value="AC Central">AC Central</option>
+                                <option value="Lainnya">Lainnya</option>
+                              </select>
+                            </Field>
+
+                            <Field label="Lokasi / ruangan">
+                              <input
+                                className={inputClass}
+                                value={selectedUnit?.location ?? item.location}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+
+                                  updateService(index, "location", value);
+
+                                  setUnits((current) =>
+                                    current.map((unit) =>
+                                      unit.id === item.unitId
+                                        ? { ...unit, location: value }
+                                        : unit,
+                                    ),
+                                  );
+                                }}
+                                placeholder="Kamar utama"
+                              />
+                            </Field>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Price row */}
+                      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-[80px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                        <Field label="Jumlah">
+                          <input
+                            className={inputClass}
+                            type="number"
+                            min="1"
+                            value={item.amount}
+                            onChange={(e) =>
+                              updateService(
+                                index,
+                                "amount",
+                                Math.max(1, Number(e.target.value)),
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="Harga satuan">
+                          <input
+                            className={inputClass}
+                            type="number"
+                            min="0"
+                            value={item.price}
+                            onChange={(e) =>
+                              updateService(
+                                index,
+                                "price",
+                                Math.max(0, Number(e.target.value)),
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="Garansi (hari)">
+                          <input
+                            className={inputClass}
+                            type="number"
+                            min="0"
+                            value={item.warranty}
+                            onChange={(e) =>
+                              updateService(index, "warranty", e.target.value)
+                            }
+                          />
+                        </Field>
+
+                        <div className="flex flex-col items-end justify-center">
+                          <span className="text-xs text-slate-500">
+                            Subtotal
+                          </span>
+                          <span className="text-sm font-semibold text-slate-900">
+                            {money(item.amount * item.price)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <button
                   type="button"
@@ -511,7 +794,8 @@ export default function CreateOrderPage() {
                         service_id: "",
                         brand: "",
                         pk: "",
-                        unit_type: "AC Split",
+                        unitId: "",
+                        unit_type: "Split Wall",
                         location: "",
                         amount: 1,
                         price: 0,
@@ -524,6 +808,7 @@ export default function CreateOrderPage() {
                 </button>
               </div>
 
+              {/* Sparepart */}
               <div className="mt-5 border-t border-slate-100 pt-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold">Sparepart</h3>
@@ -544,7 +829,7 @@ export default function CreateOrderPage() {
                         </span>
                         <button
                           type="button"
-                          className="text-xs text-rose-600"
+                          className="text-xs text-rose-600 hover:underline"
                           onClick={() =>
                             setSpareparts((current) =>
                               current.filter((_, i) => i !== index),
@@ -554,6 +839,7 @@ export default function CreateOrderPage() {
                           Hapus
                         </button>
                       </div>
+
                       <Field label="Nama / informasi sparepart">
                         <input
                           className={inputClass}
@@ -568,7 +854,8 @@ export default function CreateOrderPage() {
                           placeholder="Contoh: Pipa tembaga 1/4"
                         />
                       </Field>
-                      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+
+                      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
                         <Field label="Jumlah">
                           <input
                             className={inputClass}
@@ -584,6 +871,7 @@ export default function CreateOrderPage() {
                             }
                           />
                         </Field>
+
                         <Field label="Harga jual (Rp)">
                           <input
                             className={inputClass}
@@ -599,6 +887,7 @@ export default function CreateOrderPage() {
                             }
                           />
                         </Field>
+
                         <Field label="Harga modal (Rp)">
                           <input
                             className={inputClass}
@@ -612,16 +901,6 @@ export default function CreateOrderPage() {
                                 Math.max(0, Number(e.target.value)),
                               )
                             }
-                          />
-                        </Field>
-                        <Field label="Garansi">
-                          <input
-                            className={inputClass}
-                            value={item.warranty}
-                            onChange={(e) =>
-                              updateSparepart(index, "warranty", e.target.value)
-                            }
-                            placeholder="Opsional"
                           />
                         </Field>
                       </div>
@@ -645,6 +924,125 @@ export default function CreateOrderPage() {
                     }
                   >
                     + Tambah sparepart
+                  </button>
+                </div>
+              </div>
+
+              {/* Biaya lain */}
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Biaya Lain</h3>
+                  <span className="text-xs text-slate-500">
+                    {otherCost.length} item
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {otherCost.map((item, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-amber-200 bg-amber-50/40 p-3"
+                    >
+                      <div className="mb-3 flex justify-between">
+                        <span className="text-xs font-semibold text-amber-800">
+                          Biaya Lain {index + 1}
+                        </span>
+                        <button
+                          type="button"
+                          className="text-xs text-rose-600 hover:underline"
+                          onClick={() =>
+                            setOtherCost((current) =>
+                              current.filter((_, i) => i !== index),
+                            )
+                          }
+                        >
+                          Hapus
+                        </button>
+                      </div>
+
+                      <Field label="Nama / informasi biaya">
+                        <input
+                          className={inputClass}
+                          value={item.information}
+                          onChange={(e) =>
+                            updateOtherCost(
+                              index,
+                              "information",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Contoh: Biaya transportasi"
+                        />
+                      </Field>
+
+                      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        <Field label="Jumlah">
+                          <input
+                            className={inputClass}
+                            type="number"
+                            min="1"
+                            value={item.amount}
+                            onChange={(e) =>
+                              updateOtherCost(
+                                index,
+                                "amount",
+                                Math.max(1, Number(e.target.value)),
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="Harga jual (Rp)">
+                          <input
+                            className={inputClass}
+                            type="number"
+                            min="0"
+                            value={item.price}
+                            onChange={(e) =>
+                              updateOtherCost(
+                                index,
+                                "price",
+                                Math.max(0, Number(e.target.value)),
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="Harga modal (Rp)">
+                          <input
+                            className={inputClass}
+                            type="number"
+                            min="0"
+                            value={item.capital_price}
+                            onChange={(e) =>
+                              updateOtherCost(
+                                index,
+                                "capital_price",
+                                Math.max(0, Number(e.target.value)),
+                              )
+                            }
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    onClick={() =>
+                      setOtherCost((current) => [
+                        ...current,
+                        {
+                          information: "",
+                          amount: 1,
+                          price: 0,
+                          capital_price: 0,
+                        },
+                      ])
+                    }
+                  >
+                    + Tambah Biaya Lain
                   </button>
                 </div>
               </div>
