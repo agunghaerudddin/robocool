@@ -20,7 +20,6 @@ import {
   createProductOrder,
   createComplaintSchedule,
   createAssignment,
-  createOrderHistory,
 } from "@/app/fetch/add/fetch";
 
 export type CustomerOption = {
@@ -431,18 +430,6 @@ export default function CreateOrderPage() {
       }
 
       const orderId = createdOrder.id;
-
-      // 2.1 Explicitly insert initial history for the order
-      try {
-        await createOrderHistory({
-          order_id: orderId,
-          date_start: new Date().toISOString(),
-          status: "pending",
-          notes: "Order created",
-        });
-      } catch (histErr) {
-        console.warn("Failed to create initial order history from frontend:", histErr);
-      }
 
       // 3. Create Service Orders and associated Units
       for (const srv of services) {
