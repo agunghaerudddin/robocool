@@ -27,13 +27,15 @@ export async function POST(req: Request) {
 
     const supabase = createSupabaseAdmin();
 
+    const orderStatus = status ?? "pending";
+
     const { data, error } = await supabase
       .from("orders")
       .insert({
         customer_id,
         user_id,
         commission_mode: commission_mode ?? null,
-        status: status ?? "pending",
+        status: orderStatus,
         payment_type: payment_type ?? null,
         payment_status: payment_status ?? "unpaid",
         assign_to: assign_to ?? null,
@@ -48,6 +50,61 @@ export async function POST(req: Request) {
         { error: "Failed to create order." },
         { status: 500 },
       );
+    }
+
+    // Insert initial record to order_history
+    const nowIso = new Date().toISOString();
+    const historyPayload: Record<string, any> = {
+      order_id: data.id,
+      date_start: nowIso,
+      status: orderStatus,
+      notes: "Order created",
+      create_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    let { error: historyError } = await supabase
+      .from("order_history")
+      .insert(historyPayload);
+
+    // If failed, try with created_at instead of create_at or minimal schema
+    if (historyError) {
+      console.warn("First insert to order_history failed:", historyError.message);
+      
+      const retryPayload: Record<string, any> = {
+        order_id: data.id,
+        date_start: nowIso,
+        status: orderStatus,
+        notes: "Order created",
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+
+      const retryRes = await supabase
+        .from("order_history")
+        .insert(retryPayload);
+
+      if (retryRes.error) {
+        console.warn("Retry with created_at failed:", retryRes.error.message);
+        
+        // Try minimal payload without timestamp column names in case DB defaults them
+        const minimalRes = await supabase
+          .from("order_history")
+          .insert({
+            order_id: data.id,
+            date_start: nowIso,
+            status: orderStatus,
+            notes: "Order created",
+          });
+
+        if (minimalRes.error) {
+          console.error("All order_history insert attempts failed:", minimalRes.error);
+        } else {
+          historyError = null;
+        }
+      } else {
+        historyError = null;
+      }
     }
 
     return NextResponse.json(

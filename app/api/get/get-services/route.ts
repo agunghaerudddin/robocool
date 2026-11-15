@@ -4,6 +4,7 @@ export async function GET() {
   const supabase = createSupabaseAdmin();
 
   const { data, error } = await supabase.from("services").select(`
+    id,
     name,
     price,
     warranty,

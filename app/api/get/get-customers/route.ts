@@ -4,10 +4,12 @@ export async function GET() {
   const supabase = createSupabaseAdmin();
 
   const { data, error } = await supabase.from("customers").select(`
+    id,
     name,
     phone,
     google_maps,
     label,
+    type,
     updated_at,
     orders(count)
   `);

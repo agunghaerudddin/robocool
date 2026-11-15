@@ -5,7 +5,8 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const { brand, service_order_id, pk, type, location } = body;
+    const { brand, service_order_id, pk, type, location, costumer_id, customer_id } = body;
+    const finalCustomerId = costumer_id || customer_id || null;
 
     // Validate required fields
     if (
@@ -30,8 +31,9 @@ export async function POST(req: Request) {
         pk: pk ?? null,
         type: type.trim(),
         location: typeof location === "string" ? location.trim() || null : null,
+        costumer_id: finalCustomerId,
       })
-      .select("id, brand, service_order_id, pk, type, location")
+      .select("id, brand, service_order_id, pk, type, location, costumer_id")
       .single();
 
     if (error) {

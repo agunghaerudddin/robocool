@@ -4,7 +4,48 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Section from "@/app/component/Section";
 import Field from "@/app/component/Field";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
-import { getUnits } from "@/app/fetch/get/fetch";
+import {
+  getCustomers,
+  getServices,
+  getUnits,
+  getUsers,
+} from "@/app/fetch/get/fetch";
+import {
+  createCustomer,
+  createOrder,
+  createServiceOrder,
+  createUnit,
+  createSparepartOrder,
+  createOtherCostsOrder,
+  createProductOrder,
+  createComplaintSchedule,
+  createAssignment,
+  createOrderHistory,
+} from "@/app/fetch/add/fetch";
+
+export type CustomerOption = {
+  id: string;
+  name: string;
+  phone: string;
+  google_maps?: string | null;
+  label?: string | null;
+  type?: string | null;
+};
+
+export type ServiceOption = {
+  id: string;
+  name: string;
+  price: number;
+  warranty?: string | null;
+  estimate?: string | null;
+};
+
+export type TechnicianOption = {
+  id: string;
+  name: string;
+  email?: string;
+  role?: number;
+};
 
 type ServiceItem = {
   service_id: string;
@@ -45,6 +86,7 @@ type UnitItem = {
   pk: string;
   unit_type: string;
   location: string;
+  costumer_id?: string | null;
 };
 
 const inputClass =
@@ -64,62 +106,66 @@ const money = (value: number) =>
   }).format(value || 0);
 
 export default function CreateOrderPage() {
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Data lists from API
+  const [customerList, setCustomerList] = useState<CustomerOption[]>([]);
+  const [serviceList, setServiceList] = useState<ServiceOption[]>([]);
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
+
+  // Customer State
   const [customerId, setCustomerId] = useState("");
-  const [customerType, setCustomerType] = useState("Langganan");
+  const [customerSearch, setCustomerSearch] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [googleMaps, setGoogleMaps] = useState("");
-  const [units, setUnits] = useState<UnitItem[]>([
-    {
-      id: "unit-1",
-      brand: "Daikin",
-      pk: "1",
-      unit_type: "AC Split",
-      location: "Ruang tamu",
-    },
-  ]);
-
-  const [status, setStatus] = useState("pending");
-  const [paymentType, setPaymentType] = useState("cash");
-  const [paymentStatus, setPaymentStatus] = useState("unpaid");
-  const [commissionMode, setCommissionMode] = useState("percentage");
-  const [commission, setCommission] = useState(0);
-  const [discount, setDiscount] = useState(0);
-  const [newUnitId, setNewUnitId] = useState<number | null>(null);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-
   const [customerCategory, setCustomerCategory] = useState<
     "Perorangan" | "Perusahaan"
   >("Perorangan");
-
   const [addressLabel, setAddressLabel] = useState("Rumah");
 
+  // Units
+  const [units, setUnits] = useState<UnitItem[]>([]);
+  const [newUnitId, setNewUnitId] = useState<number | null>(null);
+
+  // Order Settings (Defaults)
+  const [commissionMode, setCommissionMode] = useState("percentage");
+  const [commission, setCommission] = useState(0);
+  const [discount, setDiscount] = useState(0);
+
+  // Services, Spareparts, Other Costs, Products
   const [services, setServices] = useState<ServiceItem[]>([
     {
       service_id: "",
       unitId: "",
       brand: "",
       pk: "",
-      unit_type: "AC Split",
+      unit_type: "Split Wall",
       location: "",
       amount: 1,
       price: 0,
       warranty: "",
     },
   ]);
-
   const [spareparts, setSpareparts] = useState<SparepartItem[]>([]);
   const [otherCost, setOtherCost] = useState<OtherCostItem[]>([]);
   const [products, setProducts] = useState<ProductItem[]>([]);
+
+  // Schedule & Notes
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [complaint, setComplaint] = useState("");
   const [notes, setNotes] = useState("");
-  const [assignTo, setAssignTo] = useState("");
+
+  // Assign Technician
+  const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]);
+
+  // UI state
   const [submitting, setSubmitting] = useState(false);
 
+  // Totals
   const serviceTotal = services.reduce(
     (sum, item) => sum + item.amount * item.price,
     0,
@@ -130,13 +176,18 @@ export default function CreateOrderPage() {
     0,
   );
 
+  const otherCostTotal = otherCost.reduce(
+    (sum, item) => sum + item.amount * item.price,
+    0,
+  );
+
   const productTotal = products.reduce(
     (sum, item) => sum + item.amount * item.price,
     0,
   );
 
-  const subtotal = serviceTotal + sparepartTotal + productTotal;
-
+  const subtotal =
+    serviceTotal + sparepartTotal + otherCostTotal + productTotal;
   const total = Math.max(0, subtotal - Number(discount || 0));
 
   const commissionAmount =
@@ -144,6 +195,7 @@ export default function CreateOrderPage() {
       ? (total * Number(commission || 0)) / 100
       : Number(commission || 0);
 
+  // Helper updaters
   const updateService = (
     index: number,
     field: keyof ServiceItem,
@@ -167,6 +219,7 @@ export default function CreateOrderPage() {
       ),
     );
   };
+
   const updateSparepart = (
     index: number,
     field: keyof SparepartItem,
@@ -191,61 +244,142 @@ export default function CreateOrderPage() {
     );
   };
 
-  const orderPreview = useMemo(
-    () => ({
-      customer: {
-        id: customerId || null,
-        name: customerName,
-        phone,
-        type: customerType,
-        address,
-        google_maps: googleMaps,
-      },
-      order: {
-        status,
-        payment_type: paymentType,
-        payment_status: paymentStatus,
-        commission_mode: commissionMode,
-        commission: commissionAmount,
-        discount,
-        assign_to: assignTo || null,
-      },
-      services,
-      spareparts,
-      products,
-      complaint_schedule: {
-        date: scheduleDate,
-        time: scheduleTime,
-        complaint_schedule: complaint,
-        notes,
-      },
-    }),
-    [
-      customerId,
-      customerName,
-      phone,
-      customerType,
-      address,
-      googleMaps,
-      status,
-      paymentType,
-      paymentStatus,
-      commissionMode,
-      commissionAmount,
-      discount,
-      assignTo,
-      services,
-      spareparts,
-      products,
-      scheduleDate,
-      scheduleTime,
-      complaint,
-      notes,
-    ],
-  );
+  // Auth fetch
+  useEffect(() => {
+    const getLoggedInUser = async () => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.getUser();
 
+      if (error || !data.user) {
+        console.error("User not logged in:", error);
+        return;
+      }
+
+      setUserId(data.user.id);
+    };
+
+    getLoggedInUser();
+  }, []);
+
+  // Fetch initial general data
+  const hasFetched = useRef(false);
+  useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+
+    const fetchAllData = async () => {
+      try {
+        const [customersRes, servicesRes, unitsRes, usersRes] =
+          await Promise.allSettled([
+            getCustomers(),
+            getServices(),
+            getUnits(),
+            getUsers(),
+          ]);
+
+        if (customersRes.status === "fulfilled" && customersRes.value?.data) {
+          setCustomerList(customersRes.value.data);
+        }
+
+        if (servicesRes.status === "fulfilled" && servicesRes.value?.data) {
+          setServiceList(servicesRes.value.data);
+        }
+
+        if (unitsRes.status === "fulfilled" && unitsRes.value?.data) {
+          const rawUnits = unitsRes.value.data;
+          setUnits(
+            rawUnits.map((u: any, idx: number) => ({
+              id: u.id || `unit-${idx + 1}`,
+              brand: u.brand || "",
+              pk: u.pk ? String(u.pk) : "",
+              unit_type: u.type || "Split Wall",
+              location: u.location || "",
+              costumer_id:
+                u.costumer_id || u.service_orders?.orders?.customer_id || null,
+            })),
+          );
+        }
+
+        if (usersRes.status === "fulfilled" && usersRes.value?.data) {
+          setTechnicians(usersRes.value.data);
+        }
+      } catch (err) {
+        console.error("Error loading initial data:", err);
+      }
+    };
+
+    fetchAllData();
+  }, []);
+
+  // Re-fetch customer-specific units when customer is selected
+  useEffect(() => {
+    if (!customerId) return;
+
+    const fetchCustomerUnits = async () => {
+      try {
+        const res = await getUnits(customerId);
+        if (res?.data && Array.isArray(res.data)) {
+          const fetched: UnitItem[] = res.data.map((u: any, idx: number) => ({
+            id: u.id || `unit-${idx + 1}`,
+            brand: u.brand || "",
+            pk: u.pk ? String(u.pk) : "",
+            unit_type: u.type || "Split Wall",
+            location: u.location || "",
+            costumer_id: customerId,
+          }));
+
+          // Merge without duplicates
+          setUnits((prev) => {
+            const existingIds = new Set(fetched.map((u) => u.id));
+            const remaining = prev.filter((u) => !existingIds.has(u.id));
+            return [...fetched, ...remaining];
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load customer units:", err);
+      }
+    };
+
+    fetchCustomerUnits();
+  }, [customerId]);
+
+  // Filtered customer suggestions
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch.trim()) return [];
+    const query = customerSearch.toLowerCase();
+    return customerList.filter(
+      (c) =>
+        c.name.toLowerCase().includes(query) ||
+        (c.phone && c.phone.includes(query)),
+    );
+  }, [customerSearch, customerList]);
+
+  // Filter units for dropdown: customer-specific units first, then others
+  const availableUnitsForCustomer = useMemo(() => {
+    if (!customerId) return units;
+    const customerSpecific = units.filter((u) => u.costumer_id === customerId);
+    if (customerSpecific.length > 0) return customerSpecific;
+    return units;
+  }, [customerId, units]);
+
+  // Handle customer selection
+  const selectCustomer = (cust: CustomerOption) => {
+    setCustomerId(cust.id);
+    setCustomerName(cust.name);
+    setPhone(cust.phone || "");
+    setGoogleMaps(cust.google_maps || "");
+    setAddress(cust.label || "");
+    setCustomerSearch(cust.name);
+  };
+
+  // Submit flow
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    if (!userId) {
+      alert("Sesi login tidak ditemukan. Silakan login terlebih dahulu.");
+      return;
+    }
 
     if (!customerId && (!customerName.trim() || !phone.trim())) {
       alert("Isi nama dan nomor telepon pelanggan terlebih dahulu.");
@@ -255,66 +389,171 @@ export default function CreateOrderPage() {
     setSubmitting(true);
 
     try {
-      // Preview the complete form payload.
-      // Connect this payload to a transactional order-creation API/RPC.
-      console.log("Order payload:", orderPreview);
+      let finalCustomerId = customerId;
 
+      // 1. Create Customer if new
+      if (!finalCustomerId) {
+        const customerRes = await createCustomer({
+          name: customerName.trim(),
+          phone: phone.trim(),
+          google_maps: googleMaps.trim() || null,
+          label: address.trim() || addressLabel.trim() || null,
+          type: customerCategory,
+        });
+
+        if (!customerRes?.data?.customer?.id) {
+          throw new Error("Gagal membuat pelanggan baru.");
+        }
+        finalCustomerId = customerRes.data.customer.id;
+      }
+
+      // 2. Create Order with fixed defaults: pending, payment_type null, payment_status unpaid
+      const primaryAssignee =
+        selectedTechnicians.length > 0 ? selectedTechnicians[0] : null;
+
+      const orderRes = await createOrder({
+        user_id: userId,
+        customer: { customer_id: finalCustomerId },
+        order: {
+          commission_mode: commissionMode,
+          status: "pending",
+          payment_type: null,
+          payment_status: "unpaid",
+          assign_to: primaryAssignee,
+        },
+      });
+
+      const createdOrder = orderRes?.data?.order;
+      if (!createdOrder?.id) {
+        throw new Error(
+          orderRes?.data?.error || "Gagal membuat pesanan (Order).",
+        );
+      }
+
+      const orderId = createdOrder.id;
+
+      // 2.1 Explicitly insert initial history for the order
+      try {
+        await createOrderHistory({
+          order_id: orderId,
+          date_start: new Date().toISOString(),
+          status: "pending",
+          notes: "Order created",
+        });
+      } catch (histErr) {
+        console.warn("Failed to create initial order history from frontend:", histErr);
+      }
+
+      // 3. Create Service Orders and associated Units
+      for (const srv of services) {
+        if (!srv.service_id) continue;
+
+        const srvRes = await createServiceOrder({
+          order_id: orderId,
+          services_id: srv.service_id,
+          amount: Number(srv.amount) || 1,
+          price: Number(srv.price) || 0,
+          warranty: srv.warranty || null,
+        });
+
+        const createdServiceOrderId = srvRes?.data?.service_order?.id;
+
+        // If unit info is filled or a new unit is being added, save to units table
+        if (srv.brand || srv.unit_type || srv.location || srv.pk) {
+          const isExisting =
+            srv.unitId &&
+            !srv.unitId.startsWith("temp-") &&
+            units.some((u) => u.id === srv.unitId && u.costumer_id);
+
+          // If it's a new or modified unit, save it to the database with customer_id & service_order_id
+          if (
+            !isExisting ||
+            srv.unitId.startsWith("temp-") ||
+            newUnitId !== null
+          ) {
+            await createUnit({
+              brand: srv.brand || "AC",
+              type: srv.unit_type || "Split Wall",
+              pk: srv.pk ? Number(srv.pk) || srv.pk : null,
+              location: srv.location || null,
+              service_order_id: createdServiceOrderId || null,
+              costumer_id: finalCustomerId,
+              customer_id: finalCustomerId,
+            });
+          }
+        }
+      }
+
+      // 4. Create Sparepart Orders
+      for (const sp of spareparts) {
+        if (!sp.information.trim()) continue;
+        await createSparepartOrder({
+          order_id: orderId,
+          information: sp.information,
+          amount: Number(sp.amount) || 1,
+          price: Number(sp.price) || 0,
+          capital_price: Number(sp.capital_price) || 0,
+        });
+      }
+
+      // 5. Create Other Cost Orders
+      for (const oc of otherCost) {
+        if (!oc.information.trim()) continue;
+        await createOtherCostsOrder({
+          order_id: orderId,
+          information: oc.information,
+          amount: Number(oc.amount) || 1,
+          price: Number(oc.price) || 0,
+          capital_price: Number(oc.capital_price) || 0,
+        });
+      }
+
+      // 6. Create Product Orders
+      for (const pr of products) {
+        if (!pr.name.trim()) continue;
+        await createProductOrder({
+          order_id: orderId,
+          name: pr.name,
+          amount: Number(pr.amount) || 1,
+          price: Number(pr.price) || 0,
+          capital_price: Number(pr.capital_price) || 0,
+        });
+      }
+
+      // 7. Create Complaint Schedule if provided
+      if (scheduleDate && scheduleTime && complaint.trim()) {
+        await createComplaintSchedule({
+          order_id: orderId,
+          date: scheduleDate,
+          time: scheduleTime,
+          complaint_schedule: complaint,
+          notes: notes || null,
+        });
+      }
+
+      // 8. Create Assignments for all selected technicians
+      for (const techId of selectedTechnicians) {
+        await createAssignment({
+          order_id: orderId,
+          assigned_to: techId,
+          status: "assigned",
+        });
+      }
+
+      alert("Order berhasil dibuat!");
+      window.location.href = "/order";
+    } catch (error: any) {
+      console.error("Gagal membuat pesanan:", error);
       alert(
-        "Form sudah siap. Hubungkan handleSubmit ke API transaksi order untuk menyimpan seluruh data.",
+        error?.response?.data?.error ||
+          error?.message ||
+          "Terjadi kesalahan saat membuat pesanan.",
       );
     } finally {
       setSubmitting(false);
     }
   }
 
-  useEffect(() => {
-    const getLoggedInUser = async () => {
-      const supabase = getSupabaseBrowserClient();
-
-      const { data, error } = await supabase.auth.getUser();
-
-      if (error || !data.user) {
-        console.error("User not logged in:", error);
-        return;
-      }
-
-      setUserId(data.user.id);
-
-      console.log("Logged in user:", data.user);
-      console.log("User ID:", data.user.id);
-    };
-
-    getLoggedInUser();
-  }, []);
-
-  const hasFetchedUnits = useRef(false);
-
-  useEffect(() => {
-    if (hasFetchedUnits.current) return;
-
-    hasFetchedUnits.current = true;
-
-    const fetchUnits = async () => {
-      try {
-        const response = await getUnits();
-
-        if (!response) return;
-
-        const data = response.data;
-
-        console.log(data, "ini bedengnya");
-
-        setUnits(data);
-      } catch (error) {
-        console.error("Failed to fetch units:", error);
-        hasFetchedUnits.current = false;
-      }
-    };
-
-    fetchUnits();
-  }, []);
-
-  
   return (
     <main className="min-h-screen bg-slate-50 px-3 py-6 text-slate-800 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
@@ -331,17 +570,55 @@ export default function CreateOrderPage() {
           className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px]"
         >
           <div className="space-y-5">
-            {/* CUSTOMER */}
+            {/* 1. PELANGGAN */}
             <Section number="1" title="Pelanggan">
               {!showNewCustomer ? (
-                /* DEFAULT: CUSTOMER SEARCH */
-                <div className="space-y-2">
-                  <input
-                    className={inputClass + " w-full"}
-                    placeholder="Ketik nama atau no. WA pelanggan..."
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                  />
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Field label="Cari Pelanggan Terdaftar">
+                      <input
+                        className={inputClass + " w-full"}
+                        placeholder="Ketik nama atau no. WA pelanggan..."
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          if (customerId) setCustomerId("");
+                        }}
+                      />
+                    </Field>
+
+                    {customerSearch &&
+                      filteredCustomers.length > 0 &&
+                      !customerId && (
+                        <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                          {filteredCustomers.map((cust) => (
+                            <div
+                              key={cust.id}
+                              className="flex cursor-pointer items-center justify-between px-3 py-2 text-xs hover:bg-blue-50"
+                              onClick={() => selectCustomer(cust)}
+                            >
+                              <span className="font-semibold text-slate-800">
+                                {cust.name}
+                              </span>
+                              <span className="text-slate-500">
+                                {cust.phone}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+
+                  {customerId && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 text-xs text-slate-700">
+                      <p className="font-semibold text-blue-900">
+                        Pelanggan Terpilih: {customerName} ({phone})
+                      </p>
+                      {address && (
+                        <p className="mt-1 text-slate-600">Alamat: {address}</p>
+                      )}
+                    </div>
+                  )}
 
                   <button
                     type="button"
@@ -352,6 +629,7 @@ export default function CreateOrderPage() {
                       setPhone("");
                       setAddress("");
                       setGoogleMaps("");
+                      setCustomerSearch("");
                     }}
                     className="text-xs font-medium text-blue-600 hover:underline"
                   >
@@ -359,9 +637,7 @@ export default function CreateOrderPage() {
                   </button>
                 </div>
               ) : (
-                /* NEW CUSTOMER FORM */
                 <div className="space-y-4">
-                  {/* NAME & PHONE */}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Nama pelanggan">
                       <input
@@ -385,7 +661,6 @@ export default function CreateOrderPage() {
                     </Field>
                   </div>
 
-                  {/* CUSTOMER CATEGORY */}
                   <div className="flex items-center gap-4 text-xs">
                     {["Perorangan", "Perusahaan"].map((type) => (
                       <label
@@ -424,7 +699,6 @@ export default function CreateOrderPage() {
                     </button>
                   </div>
 
-                  {/* VISIT ADDRESS */}
                   <Field label="Alamat kunjungan">
                     <div className="space-y-2 rounded-lg bg-slate-50 p-2">
                       <div className="grid gap-2 sm:grid-cols-[165px_1fr]">
@@ -456,15 +730,13 @@ export default function CreateOrderPage() {
               )}
             </Section>
 
-            {/* SERVICES */}
-
+            {/* 2. JASA */}
             <Section number="2" title="Jasa">
               <div className="space-y-4">
                 {services.map((item, index) => {
                   const selectedUnit = units.find(
                     (unit) => unit.id === item.unitId,
                   );
-
                   const isCreatingUnit = newUnitId === index;
 
                   return (
@@ -472,10 +744,9 @@ export default function CreateOrderPage() {
                       key={index}
                       className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4"
                     >
-                      {/* Card header */}
                       <div className="mb-3 flex items-center justify-between">
                         <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                          Jasa
+                          Jasa {index + 1}
                         </span>
 
                         <div className="flex gap-3">
@@ -499,7 +770,6 @@ export default function CreateOrderPage() {
                               setServices((current) =>
                                 current.filter((_, i) => i !== index),
                               );
-
                               setNewUnitId((current) =>
                                 current === index
                                   ? null
@@ -514,21 +784,17 @@ export default function CreateOrderPage() {
                         </div>
                       </div>
 
-                      {/* Main row */}
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)_minmax(0,1.5fr)]">
-                        <Field label="Unit AC pelanggan">
+                        <Field label="Unit AC Pelanggan">
                           <select
                             className={inputClass}
                             value={isCreatingUnit ? "__new__" : item.unitId}
                             onChange={(e) => {
                               const unitId = e.target.value;
-
                               if (unitId === "__new__") return;
 
                               const unit = units.find((u) => u.id === unitId);
-
                               setNewUnitId(null);
-
                               setServices((current) =>
                                 current.map((service, i) =>
                                   i === index
@@ -547,16 +813,14 @@ export default function CreateOrderPage() {
                             }}
                           >
                             <option value="">— Tanpa unit —</option>
-
                             {isCreatingUnit && (
                               <option value="__new__">+ Unit baru</option>
                             )}
-
-                            {units.map((unit) => (
+                            {availableUnitsForCustomer.map((unit) => (
                               <option key={unit.id} value={unit.id}>
                                 {unit.brand || "Tanpa merek"}{" "}
                                 {unit.pk ? `${unit.pk} PK` : ""} —{" "}
-                                {unit.location || "Tanpa lokasi"}
+                                {unit.location || unit.unit_type || "Lokasi"}
                               </option>
                             ))}
                           </select>
@@ -567,8 +831,7 @@ export default function CreateOrderPage() {
                             type="button"
                             className="w-full whitespace-nowrap rounded-md border border-slate-200 px-3 py-2 text-xs font-medium hover:bg-slate-50 sm:w-auto"
                             onClick={() => {
-                              const id = crypto.randomUUID();
-
+                              const id = `temp-unit-${Date.now()}`;
                               setUnits((current) => [
                                 ...current,
                                 {
@@ -577,9 +840,9 @@ export default function CreateOrderPage() {
                                   pk: "1",
                                   unit_type: "Split Wall",
                                   location: "",
+                                  costumer_id: customerId || null,
                                 },
                               ]);
-
                               setServices((current) =>
                                 current.map((service, i) =>
                                   i === index
@@ -594,7 +857,6 @@ export default function CreateOrderPage() {
                                     : service,
                                 ),
                               );
-
                               setNewUnitId(index);
                             }}
                           >
@@ -608,9 +870,7 @@ export default function CreateOrderPage() {
                             value={selectedUnit?.brand ?? item.brand}
                             onChange={(e) => {
                               const value = e.target.value;
-
                               updateService(index, "brand", value);
-
                               if (item.unitId) {
                                 setUnits((current) =>
                                   current.map((unit) =>
@@ -625,41 +885,58 @@ export default function CreateOrderPage() {
                           />
                         </Field>
 
-                        <Field label="Layanan">
+                        <Field label="Layanan (Dari Database)">
                           <select
                             className={inputClass}
                             value={item.service_id}
-                            onChange={(e) =>
-                              updateService(index, "service_id", e.target.value)
-                            }
+                            onChange={(e) => {
+                              const srvId = e.target.value;
+                              const foundSrv = serviceList.find(
+                                (s) => String(s.id) === srvId,
+                              );
+                              setServices((current) =>
+                                current.map((service, i) =>
+                                  i === index
+                                    ? {
+                                        ...service,
+                                        service_id: srvId,
+                                        price: foundSrv
+                                          ? foundSrv.price
+                                          : service.price,
+                                        warranty:
+                                          foundSrv?.warranty ||
+                                          service.warranty,
+                                      }
+                                    : service,
+                                ),
+                              );
+                            }}
                           >
                             <option value="">— Pilih layanan —</option>
-                            <option value="service-1">Cuci AC</option>
-                            <option value="service-2">Perbaikan AC</option>
-                            <option value="service-3">Tambah Freon</option>
-                            <option value="service-4">Pasang AC</option>
+                            {serviceList.map((srv) => (
+                              <option key={srv.id} value={srv.id}>
+                                {srv.name} ({money(srv.price)})
+                              </option>
+                            ))}
                           </select>
                         </Field>
                       </div>
 
-                      {/* New unit editor */}
+                      {/* Unit editor */}
                       {item.unitId && isCreatingUnit && (
                         <div className="mt-3 rounded-md border border-blue-100 bg-blue-50/70 p-3">
                           <div className="mb-3 flex items-center justify-between">
                             <p className="text-xs font-semibold text-blue-800">
-                              Unit AC baru — tersimpan ke data pelanggan
+                              Detail Unit AC Baru (Tersimpan ke Pelanggan)
                             </p>
-
                             <button
                               type="button"
                               className="text-xs text-rose-600 hover:underline"
                               onClick={() => {
                                 const id = item.unitId;
-
                                 setUnits((current) =>
                                   current.filter((unit) => unit.id !== id),
                                 );
-
                                 setServices((current) =>
                                   current.map((service, i) =>
                                     i === index
@@ -674,7 +951,6 @@ export default function CreateOrderPage() {
                                       : service,
                                   ),
                                 );
-
                                 setNewUnitId(null);
                               }}
                             >
@@ -686,12 +962,10 @@ export default function CreateOrderPage() {
                             <Field label="Merek">
                               <input
                                 className={inputClass}
-                                value={selectedUnit?.brand ?? ""}
+                                value={selectedUnit?.brand ?? item.brand}
                                 onChange={(e) => {
                                   const value = e.target.value;
-
                                   updateService(index, "brand", value);
-
                                   setUnits((current) =>
                                     current.map((unit) =>
                                       unit.id === item.unitId
@@ -710,9 +984,7 @@ export default function CreateOrderPage() {
                                 value={selectedUnit?.pk ?? item.pk}
                                 onChange={(e) => {
                                   const value = e.target.value;
-
                                   updateService(index, "pk", value);
-
                                   setUnits((current) =>
                                     current.map((unit) =>
                                       unit.id === item.unitId
@@ -741,9 +1013,7 @@ export default function CreateOrderPage() {
                                 }
                                 onChange={(e) => {
                                   const value = e.target.value;
-
                                   updateService(index, "unit_type", value);
-
                                   setUnits((current) =>
                                     current.map((unit) =>
                                       unit.id === item.unitId
@@ -767,9 +1037,7 @@ export default function CreateOrderPage() {
                                 value={selectedUnit?.location ?? item.location}
                                 onChange={(e) => {
                                   const value = e.target.value;
-
                                   updateService(index, "location", value);
-
                                   setUnits((current) =>
                                     current.map((unit) =>
                                       unit.id === item.unitId
@@ -785,7 +1053,6 @@ export default function CreateOrderPage() {
                         </div>
                       )}
 
-                      {/* Price row */}
                       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-[80px_minmax(0,1fr)_minmax(0,1fr)_auto]">
                         <Field label="Jumlah">
                           <input
@@ -819,12 +1086,11 @@ export default function CreateOrderPage() {
                           />
                         </Field>
 
-                        <Field label="Garansi (hari)">
+                        <Field label="Garansi">
                           <input
                             className={inputClass}
-                            type="number"
-                            min="0"
                             value={item.warranty}
+                            placeholder="30 hari"
                             onChange={(e) =>
                               updateService(index, "warranty", e.target.value)
                             }
@@ -868,7 +1134,7 @@ export default function CreateOrderPage() {
                 </button>
               </div>
 
-              {/* Sparepart */}
+              {/* Spareparts */}
               <div className="mt-5 border-t border-slate-100 pt-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold">Sparepart</h3>
@@ -978,7 +1244,6 @@ export default function CreateOrderPage() {
                           amount: 1,
                           price: 0,
                           capital_price: 0,
-                          warranty: "",
                         },
                       ])
                     }
@@ -988,7 +1253,7 @@ export default function CreateOrderPage() {
                 </div>
               </div>
 
-              {/* Biaya lain */}
+              {/* Other Costs */}
               <div className="mt-5 border-t border-slate-100 pt-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold">Biaya Lain</h3>
@@ -1108,7 +1373,7 @@ export default function CreateOrderPage() {
               </div>
             </Section>
 
-            {/* PRODUCTS */}
+            {/* 3. PRODUK */}
             <Section number="3" title="Produk">
               <div className="space-y-3">
                 {products.map((item, index) => (
@@ -1122,7 +1387,7 @@ export default function CreateOrderPage() {
                       </span>
                       <button
                         type="button"
-                        className="text-xs text-rose-600"
+                        className="text-xs text-rose-600 hover:underline"
                         onClick={() =>
                           setProducts((current) =>
                             current.filter((_, i) => i !== index),
@@ -1132,6 +1397,7 @@ export default function CreateOrderPage() {
                         Hapus
                       </button>
                     </div>
+
                     <Field label="Nama produk">
                       <input
                         className={inputClass}
@@ -1142,6 +1408,7 @@ export default function CreateOrderPage() {
                         placeholder="Nama produk"
                       />
                     </Field>
+
                     <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <Field label="Jumlah">
                         <input
@@ -1191,6 +1458,7 @@ export default function CreateOrderPage() {
                     </div>
                   </div>
                 ))}
+
                 <button
                   type="button"
                   className={buttonClass}
@@ -1211,7 +1479,7 @@ export default function CreateOrderPage() {
               </div>
             </Section>
 
-            {/* COMPLAINT AND SCHEDULE */}
+            {/* 4. JADWAL & KELUHAN */}
             <Section number="4" title="Jadwal & Keluhan">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Tanggal">
@@ -1256,20 +1524,57 @@ export default function CreateOrderPage() {
 
           {/* RIGHT SIDEBAR */}
           <aside className="space-y-5 lg:sticky lg:top-5">
+            {/* 5. PELAKSANA */}
             <Section number="5" title="Pelaksana">
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
-                  />
-                  <span>Bbox</span>
-                </label>
-
-                <span className="text-xs text-slate-500">Teknisi</span>
+              <div className="space-y-2">
+                {technicians.length === 0 ? (
+                  <p className="text-xs text-slate-400">
+                    Tidak ada data teknisi
+                  </p>
+                ) : (
+                  technicians.map((tech) => (
+                    <div
+                      key={tech.id}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={selectedTechnicians.includes(tech.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTechnicians((prev) => [
+                                ...prev,
+                                tech.id,
+                              ]);
+                            } else {
+                              setSelectedTechnicians((prev) =>
+                                prev.filter((id) => id !== tech.id),
+                              );
+                            }
+                          }}
+                          className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
+                        />
+                        <span>{tech.name}</span>
+                      </label>
+                      <span className="text-xs text-slate-500">
+                        {tech.role === 1
+                          ? "Owner"
+                          : tech.role === 2
+                            ? "Admin"
+                            : tech.role === 3
+                              ? "Karyawan"
+                              : tech.role === 4
+                                ? "Mitra"
+                                : "Staff"}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </Section>
 
+            {/* RINGKASAN */}
             <section className={cardClass}>
               <h2 className="mb-4 text-sm font-semibold">Ringkasan</h2>
 
@@ -1282,6 +1587,12 @@ export default function CreateOrderPage() {
                   <span className="text-slate-500">Sparepart</span>
                   <span className="font-medium">{money(sparepartTotal)}</span>
                 </div>
+                {otherCostTotal > 0 && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">Biaya Lain</span>
+                    <span className="font-medium">{money(otherCostTotal)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-500">Produk</span>
                   <span className="font-medium">{money(productTotal)}</span>
@@ -1350,7 +1661,7 @@ export default function CreateOrderPage() {
                 disabled={submitting}
                 className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitting ? "Memproses..." : "Simpan Order"}
+                {submitting ? "Menyimpan data..." : "Simpan Order"}
               </button>
               <p className="mt-3 text-center text-xs leading-relaxed text-slate-400">
                 Pastikan data pelanggan dan item order sudah benar.

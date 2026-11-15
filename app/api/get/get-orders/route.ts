@@ -8,19 +8,26 @@ export async function GET() {
       user_id,
       assign_to,
       payment_status,
+      payment_type,
+      commission_mode,
       status,
+      created_at,
 
       creator:users!orders_user_id_fkey(name),
       assigned_user:users!orders_assign_to_fkey(name),
 
       customer_id,
-      customer:customers!orders_customer_id_fkey(name),
+      customer:customers!orders_customer_id_fkey(name, phone),
 
-      service_orders(*),
+      service_orders(
+        *,
+        service:services(name)
+      ),
       sparepart_orders(*),
-      other_costs_orders(*)
+      other_costs_orders(*),
+      product_orders(*),
+      complaint_schedules(*)
     `);
-  console.log("ahhay");
 
   if (error) {
     console.error("Failed to fetch orders:", error);
