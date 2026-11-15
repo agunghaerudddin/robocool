@@ -1,59 +1,271 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getOrder } from "@/app/fetch/get/fetch";
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+const formatRupiah = (amount: number) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+
+const formatDate = (iso: string) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleDateString("id-ID", {
+    weekday: "long",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatDateTime = (iso: string) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const formatHistoryDate = (iso: string) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+/** Map DB status to display label */
+const mapStatus = (s: string): string => {
+  switch ((s ?? "").toLowerCase()) {
+    case "pending":
+      return "Terjadwal";
+    case "in_progress":
+    case "progress":
+    case "dikerjakan":
+      return "Dikerjakan";
+    case "menunggu sparepart":
+    case "waiting_sparepart":
+      return "Menunggu Sparepart";
+    case "completed":
+    case "selesai":
+      return "Selesai";
+    case "cancelled":
+    case "canceled":
+    case "batal":
+      return "Batal";
+    default:
+      return s ?? "-";
+  }
+};
+
+/** Map DB status to badge colours */
+const statusColor = (s: string) => {
+  const display = mapStatus(s).toLowerCase();
+  if (display === "selesai")
+    return "bg-emerald-100 text-emerald-700";
+  if (display === "dikerjakan")
+    return "bg-blue-100 text-blue-700";
+  if (display === "menunggu sparepart")
+    return "bg-amber-100 text-amber-700";
+  if (display === "batal")
+    return "bg-red-100 text-red-700";
+  return "bg-slate-100 text-slate-600";
+};
+
+const mapPaymentStatus = (s: string) => {
+  switch ((s ?? "").toLowerCase()) {
+    case "paid":
+    case "lunas":
+      return "Lunas";
+    case "unpaid":
+    case "belum lunas":
+      return "Belum Lunas";
+    default:
+      return s ?? "-";
+  }
+};
+
+const paymentColor = (s: string) =>
+  mapPaymentStatus(s) === "Lunas"
+    ? "bg-emerald-100 text-emerald-700"
+    : "bg-rose-100 text-rose-700";
+
+/** Build an INV number from the order id + created_at */
+const buildInvoice = (id: string, createdAt: string) => {
+  if (!createdAt) return id;
+  const d = new Date(createdAt);
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const seq = id.slice(-4).toUpperCase();
+  return `INV/${yr}/${mo}/${seq}`;
+};
+
+// ── types ─────────────────────────────────────────────────────────────────────
+
+interface ServiceOrder {
+  id: string;
+  services_id: string;
+  amount: number;
+  price: number;
+  warranty?: number;
+  service?: { name: string; warranty?: number; estimate?: string };
+}
+
+interface SparepartOrder {
+  id: string;
+  information: string;
+  amount: number;
+  price: number;
+  capital_price?: number;
+}
+
+interface OtherCostOrder {
+  id: string;
+  information: string;
+  amount: number;
+  price: number;
+}
+
+interface ProductOrder {
+  id: string;
+  name: string;
+  amount: number;
+  price: number;
+}
+
+interface HistoryItem {
+  id?: string;
+  order_id: string;
+  date_start?: string;
+  status: string;
+  notes?: string;
+  create_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface OrderData {
+  id: string;
+  status: string;
+  payment_status: string;
+  payment_type?: string;
+  commission_mode?: string;
+  created_at: string;
+  creator?: { name: string } | null;
+  assigned_user?: { name: string } | null;
+  customer?: { name: string; phone: string; google_maps?: string; label?: string } | null;
+  service_orders?: ServiceOrder[];
+  sparepart_orders?: SparepartOrder[];
+  other_costs_orders?: OtherCostOrder[];
+  product_orders?: ProductOrder[];
+  complaint_schedules?: { id: string; date?: string; time?: string; complaint_schedule?: string; notes?: string }[];
+  order_history?: HistoryItem[];
+}
+
+// ── component ─────────────────────────────────────────────────────────────────
 
 export default function OrderDetail() {
-  const order = {
-    invoice: "INV/2026/11/0007",
-    date: "Jumat, 06 Nov 2026",
-    customer: "guntek",
-    phone: "0856-5664-6637",
-    address:
-      "Kantor — Jl. Aroepala No. 60, Gn. Sari, Kec. Rappocini, Kota Makassar, Sulawesi Selatan 90233",
-    status: "Selesai",
-    paymentStatus: "Lunas",
-    technician: "Belum ditugaskan.",
-    work: "Pasang AC Baru",
-    product: "Daikin - AC",
-    amount: 350000,
-    history: [
-      { date: "06 Nov 10:26", status: "Selesai", person: "Irfan" },
-      {
-        date: "06 Nov 10:25",
-        status: "Menunggu Sparepart",
-        person: "Irfan",
-      },
-      {
-        date: "06 Nov 10:23",
-        status: "Dikerjakan",
-        person: "Irfan",
-      },
-      {
-        date: "06 Nov 10:24",
-        status: "Terjadwal",
-        person: "Irfan",
-      },
-    ],
-  };
+  const { id } = useParams<{ id: string }>();
 
-  const formatRupiah = (amount: number) =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(amount);
+  const [order, setOrder] = useState<OrderData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const statusOptions = [
-    "Terjadwal",
-    "Dikerjakan",
-    "Menunggu Sparepart",
-    "Selesai",
-  ];
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    getOrder(id)
+      .then((res) => {
+        if (res?.data?.data) {
+          setOrder(res.data.data as OrderData);
+        } else {
+          setError("Order tidak ditemukan.");
+        }
+      })
+      .catch(() => setError("Gagal memuat data order."))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  // ── loading ────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f7fa]">
+        <p className="text-sm text-slate-400">Memuat data order…</p>
+      </div>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f7fa]">
+        <p className="text-sm text-rose-500">{error ?? "Order tidak ditemukan."}</p>
+      </div>
+    );
+  }
+
+  // ── computed display values ────────────────────────────────────────────────
+
+  const invoice = buildInvoice(order.id, order.created_at);
+  const displayStatus = mapStatus(order.status);
+  const displayPayment = mapPaymentStatus(order.payment_status);
+  const orderDate = formatDate(order.created_at);
+  const customerName = order.customer?.name ?? "—";
+  const customerPhone = order.customer?.phone ?? "";
+  const customerAddress =
+    order.customer?.google_maps || order.customer?.label || "—";
+  const technicianName = order.assigned_user?.name ?? "Belum ditugaskan.";
+  const commissionMode = order.commission_mode ?? "—";
+
+  // totals
+  const serviceTotal = (order.service_orders ?? []).reduce(
+    (s, x) => s + (x.price ?? 0) * (x.amount ?? 1),
+    0
+  );
+  const sparepartTotal = (order.sparepart_orders ?? []).reduce(
+    (s, x) => s + (x.price ?? 0) * (x.amount ?? 1),
+    0
+  );
+  const otherTotal = (order.other_costs_orders ?? []).reduce(
+    (s, x) => s + (x.price ?? 0) * (x.amount ?? 1),
+    0
+  );
+  const productTotal = (order.product_orders ?? []).reduce(
+    (s, x) => s + (x.price ?? 0) * (x.amount ?? 1),
+    0
+  );
+  const grandTotal = serviceTotal + sparepartTotal + otherTotal + productTotal;
+
+  const statusOptions = ["Terjadwal", "Dikerjakan", "Menunggu Sparepart", "Selesai"];
+
+  // history sorted newest first
+  const history = [...(order.order_history ?? [])].sort((a, b) => {
+    const ta = new Date(a.created_at ?? a.create_at ?? a.date_start ?? 0).getTime();
+    const tb = new Date(b.created_at ?? b.create_at ?? b.date_start ?? 0).getTime();
+    return tb - ta;
+  });
+
+  // ── render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] p-3 sm:p-5">
       <div className="mx-auto max-w-6xl">
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <Link
@@ -64,17 +276,21 @@ export default function OrderDetail() {
             </Link>
 
             <h1 className="text-lg font-bold leading-tight text-slate-900">
-              {order.invoice}
+              {invoice}
             </h1>
 
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
-                {order.status}
+              <span
+                className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold ${statusColor(order.status)}`}
+              >
+                {displayStatus}
               </span>
-              <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
-                {order.paymentStatus}
+              <span
+                className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold ${paymentColor(order.payment_status)}`}
+              >
+                {displayPayment}
               </span>
-              <span className="text-[10px] text-slate-400">{order.date}</span>
+              <span className="text-[10px] text-slate-400">{orderDate}</span>
             </div>
           </div>
 
@@ -88,35 +304,36 @@ export default function OrderDetail() {
           </div>
         </div>
 
-        {/* Main Grid */}
+        {/* ── Main Grid ── */}
         <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[2fr_0.95fr]">
-          {/* Left Column */}
+
+          {/* ── Left Column ── */}
           <div className="space-y-3">
+
             {/* Customer Information */}
             <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <h2 className="text-xs font-semibold text-slate-900">
-                {order.customer}
-              </h2>
-
-              <p className="mt-0.5 text-[10px] text-slate-500">{order.phone}</p>
+              <h2 className="text-xs font-semibold text-slate-900">{customerName}</h2>
+              <p className="mt-0.5 text-[10px] text-slate-500">{customerPhone}</p>
 
               <div className="mt-1.5 flex items-start gap-1 text-[10px] leading-relaxed text-slate-500">
                 <span className="shrink-0 text-rose-500">♟</span>
-                <span>{order.address}</span>
+                <span>{customerAddress}</span>
               </div>
 
-              <a
-                href="https://maps.google.com"
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 inline-block text-[10px] font-medium text-blue-600 hover:underline"
-              >
-                Buka Maps ↗
-              </a>
+              {order.customer?.google_maps && (
+                <a
+                  href={order.customer.google_maps}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-block text-[10px] font-medium text-blue-600 hover:underline"
+                >
+                  Buka Maps ↗
+                </a>
+              )}
 
               <div className="mt-2 flex gap-1.5">
                 <a
-                  href={`https://wa.me/${order.phone.replace(/\D/g, "")}`}
+                  href={`https://wa.me/${customerPhone.replace(/\D/g, "")}`}
                   target="_blank"
                   rel="noreferrer"
                   className="rounded-md bg-emerald-500 px-2.5 py-1 text-[9px] font-semibold text-white hover:bg-emerald-600"
@@ -124,7 +341,7 @@ export default function OrderDetail() {
                   WA Nota
                 </a>
                 <a
-                  href={`https://wa.me/${order.phone.replace(/\D/g, "")}`}
+                  href={`https://wa.me/${customerPhone.replace(/\D/g, "")}`}
                   target="_blank"
                   rel="noreferrer"
                   className="rounded-md bg-emerald-500 px-2.5 py-1 text-[9px] font-semibold text-white hover:bg-emerald-600"
@@ -137,30 +354,91 @@ export default function OrderDetail() {
             {/* Work Details */}
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-3 py-2.5">
-                <h2 className="text-xs font-semibold text-slate-800">
-                  Rincian Pekerjaan
-                </h2>
+                <h2 className="text-xs font-semibold text-slate-800">Rincian Pekerjaan</h2>
               </div>
 
-              <div className="p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-[11px] font-semibold text-slate-800">
-                      {order.work}
-                    </h3>
-                    <p className="text-[10px] text-slate-400">
-                      ❄ {order.product}
-                    </p>
-                    <p className="text-[9px] text-slate-400">
-                      1 × {formatRupiah(order.amount)} - garansi 15 hari (s/d 21
-                      Nov 2026)
-                    </p>
-                  </div>
+              <div className="p-3 space-y-2">
 
-                  <span className="shrink-0 text-[11px] font-semibold text-slate-900">
-                    {formatRupiah(order.amount)}
-                  </span>
-                </div>
+                {/* Services */}
+                {(order.service_orders ?? []).map((so) => (
+                  <div key={so.id} className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-[11px] font-semibold text-slate-800">
+                        {so.service?.name ?? so.services_id}
+                      </h3>
+                      {so.service?.warranty != null && (
+                        <p className="text-[9px] text-slate-400">
+                          Garansi {so.service.warranty} hari
+                        </p>
+                      )}
+                      <p className="text-[9px] text-slate-400">
+                        {so.amount} × {formatRupiah(so.price)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold text-slate-900">
+                      {formatRupiah((so.price ?? 0) * (so.amount ?? 1))}
+                    </span>
+                  </div>
+                ))}
+
+                {/* Spareparts */}
+                {(order.sparepart_orders ?? []).map((sp) => (
+                  <div key={sp.id} className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-[11px] font-semibold text-slate-800">
+                        {sp.information}
+                      </h3>
+                      <p className="text-[9px] text-slate-400">
+                        {sp.amount} × {formatRupiah(sp.price)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold text-slate-900">
+                      {formatRupiah((sp.price ?? 0) * (sp.amount ?? 1))}
+                    </span>
+                  </div>
+                ))}
+
+                {/* Other costs */}
+                {(order.other_costs_orders ?? []).map((oc) => (
+                  <div key={oc.id} className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-[11px] font-semibold text-slate-800">
+                        {oc.information}
+                      </h3>
+                      <p className="text-[9px] text-slate-400">
+                        {oc.amount} × {formatRupiah(oc.price)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold text-slate-900">
+                      {formatRupiah((oc.price ?? 0) * (oc.amount ?? 1))}
+                    </span>
+                  </div>
+                ))}
+
+                {/* Products */}
+                {(order.product_orders ?? []).map((p) => (
+                  <div key={p.id} className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-[11px] font-semibold text-slate-800">
+                        {p.name}
+                      </h3>
+                      <p className="text-[9px] text-slate-400">
+                        {p.amount} × {formatRupiah(p.price)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold text-slate-900">
+                      {formatRupiah((p.price ?? 0) * (p.amount ?? 1))}
+                    </span>
+                  </div>
+                ))}
+
+                {/* Empty state */}
+                {(order.service_orders ?? []).length === 0 &&
+                  (order.sparepart_orders ?? []).length === 0 &&
+                  (order.other_costs_orders ?? []).length === 0 &&
+                  (order.product_orders ?? []).length === 0 && (
+                    <p className="text-[10px] text-slate-400">Belum ada rincian pekerjaan.</p>
+                  )}
 
                 {/* Before & After Photos */}
                 <div className="mt-2 grid grid-cols-2 gap-2">
@@ -170,14 +448,9 @@ export default function OrderDetail() {
                       className="rounded-md border border-dashed border-slate-300 p-1.5"
                     >
                       <div className="mb-1 flex items-center justify-between">
-                        <span className="text-[9px] text-slate-600">
-                          {label}
-                        </span>
-                        <span className="text-[9px] text-red-500">
-                          belum ada
-                        </span>
+                        <span className="text-[9px] text-slate-600">{label}</span>
+                        <span className="text-[9px] text-red-500">belum ada</span>
                       </div>
-
                       <button
                         type="button"
                         className="flex h-7 w-full items-center justify-center gap-1 rounded border border-slate-200 bg-white text-[9px] font-medium text-slate-500 hover:bg-slate-50"
@@ -189,16 +462,15 @@ export default function OrderDetail() {
                 </div>
               </div>
 
-              {/* Subtotal */}
+              {/* Subtotal / Total */}
               <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-2">
                 <div className="flex justify-between text-[10px] text-slate-500">
                   <span>Subtotal</span>
-                  <span>{formatRupiah(order.amount)}</span>
+                  <span>{formatRupiah(grandTotal)}</span>
                 </div>
-
                 <div className="mt-1 flex justify-between text-xs font-bold text-slate-900">
                   <span>Total</span>
-                  <span>{formatRupiah(order.amount)}</span>
+                  <span>{formatRupiah(grandTotal)}</span>
                 </div>
               </div>
             </section>
@@ -206,34 +478,38 @@ export default function OrderDetail() {
             {/* Order History */}
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-3 py-2.5">
-                <h2 className="text-xs font-semibold text-slate-800">
-                  Riwayat
-                </h2>
+                <h2 className="text-xs font-semibold text-slate-800">Riwayat</h2>
               </div>
 
               <div className="space-y-1.5 px-3 py-2.5">
-                {order.history.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex flex-wrap gap-x-1 text-[10px] leading-relaxed"
-                  >
-                    <span className="text-slate-400">{item.date}</span>
-                    <span className="text-slate-500">
-                      {item.status} · {item.person}
-                    </span>
-                  </div>
-                ))}
+                {history.length === 0 && (
+                  <p className="text-[10px] text-slate-400">Belum ada riwayat.</p>
+                )}
+                {history.map((item, index) => {
+                  const ts = item.created_at ?? item.create_at ?? item.date_start ?? "";
+                  return (
+                    <div
+                      key={item.id ?? index}
+                      className="flex flex-wrap gap-x-1 text-[10px] leading-relaxed"
+                    >
+                      <span className="text-slate-400">{formatHistoryDate(ts)}</span>
+                      <span className="text-slate-500">
+                        {mapStatus(item.status)}
+                        {item.notes ? ` · ${item.notes}` : ""}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           </div>
 
-          {/* Right Column */}
+          {/* ── Right Column ── */}
           <div className="space-y-3">
+
             {/* Update Status */}
             <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <h2 className="mb-2 text-xs font-semibold text-slate-800">
-                Ubah Status
-              </h2>
+              <h2 className="mb-2 text-xs font-semibold text-slate-800">Ubah Status</h2>
 
               <div className="grid grid-cols-2 gap-1.5">
                 {statusOptions.map((status) => (
@@ -241,7 +517,7 @@ export default function OrderDetail() {
                     key={status}
                     type="button"
                     className={`rounded-md border px-1.5 py-1 text-[9px] font-medium transition ${
-                      order.status === status
+                      displayStatus === status
                         ? "border-blue-500 bg-blue-600 text-white"
                         : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                     }`}
@@ -259,36 +535,44 @@ export default function OrderDetail() {
 
             {/* Payment */}
             <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <h2 className="mb-2 text-xs font-semibold text-slate-800">
-                Pembayaran
-              </h2>
+              <h2 className="mb-2 text-xs font-semibold text-slate-800">Pembayaran</h2>
 
-              <div className="rounded-md bg-emerald-50 p-2">
-                <p className="text-[10px] font-semibold text-emerald-700">
-                  LUNAS · Tunai
+              <div
+                className={`rounded-md p-2 ${
+                  displayPayment === "Lunas" ? "bg-emerald-50" : "bg-rose-50"
+                }`}
+              >
+                <p
+                  className={`text-[10px] font-semibold ${
+                    displayPayment === "Lunas" ? "text-emerald-700" : "text-rose-700"
+                  }`}
+                >
+                  {displayPayment.toUpperCase()}
+                  {order.payment_type ? ` · ${order.payment_type}` : ""}
                 </p>
-                <p className="mt-0.5 text-[9px] text-emerald-700">
-                  06 Nov 2026 10:25
-                </p>
-                <p className="text-[9px] text-emerald-700">
-                  Uang dipegang: agung
+                <p
+                  className={`mt-0.5 text-[9px] ${
+                    displayPayment === "Lunas" ? "text-emerald-700" : "text-rose-700"
+                  }`}
+                >
+                  {formatDateTime(order.created_at)}
                 </p>
               </div>
 
               <p className="mt-2 text-[9px] text-slate-400">
-                Batalkan status lunas
+                {displayPayment === "Lunas"
+                  ? "Batalkan status lunas"
+                  : "Tandai sebagai lunas"}
               </p>
             </section>
 
             {/* Technician & Commission */}
             <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <h2 className="mb-2 text-xs font-semibold text-slate-800">
-                Pelaksana & Komisi
+                Pelaksana &amp; Komisi
               </h2>
-
-              <p className="text-[10px] text-slate-500">{order.technician}</p>
-
-              <p className="mt-1 text-[9px] text-slate-400">Mode: Bagi rata</p>
+              <p className="text-[10px] text-slate-500">{technicianName}</p>
+              <p className="mt-1 text-[9px] text-slate-400">Mode: {commissionMode}</p>
             </section>
           </div>
         </div>

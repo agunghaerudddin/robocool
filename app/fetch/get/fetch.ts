@@ -56,3 +56,12 @@ export const getServiceOrders = async () => {
     console.error("Failed to fetch service orders", error);
   }
 };
+
+export const getOrder = async (id: string) => {
+  try {
+    const res = await axios.get(`/api/get/get-order/${id}`);
+    return res;
+  } catch (error) {
+    console.error("Failed to fetch order", error);
+  }
+};
