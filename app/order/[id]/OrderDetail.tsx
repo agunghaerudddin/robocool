@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getOrder } from "@/app/fetch/get/fetch";
+import { updateOrderStatus } from "@/app/fetch/update/fetch";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -183,12 +184,11 @@ export default function OrderDetail() {
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    getOrder(id)
+  const fetchOrderDetail = (orderId: string) => {
+    return getOrder(orderId)
       .then((res) => {
         if (res?.data?.data) {
           setOrder(res.data.data as OrderData);
@@ -196,9 +196,48 @@ export default function OrderDetail() {
           setError("Order tidak ditemukan.");
         }
       })
-      .catch(() => setError("Gagal memuat data order."))
-      .finally(() => setLoading(false));
+      .catch(() => setError("Gagal memuat data order."));
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    fetchOrderDetail(id).finally(() => setLoading(false));
   }, [id]);
+
+  const handleUpdateStatus = async (displayStatusOption: string) => {
+    if (!id || updatingStatus) return;
+
+    // Map UI label to database status string
+    const statusMap: Record<string, string> = {
+      "Terjadwal": "pending",
+      "Dikerjakan": "in_progress",
+      "Menunggu Sparepart": "menunggu sparepart",
+      "Selesai": "completed",
+      "Batal": "cancelled",
+    };
+
+    const targetDbStatus = statusMap[displayStatusOption] || displayStatusOption.toLowerCase();
+
+    // If already current status, don't update
+    if (mapStatus(order?.status ?? "") === displayStatusOption) return;
+
+    try {
+      setUpdatingStatus(true);
+      await updateOrderStatus({
+        id,
+        status: targetDbStatus,
+        notes: `Status diubah ke ${displayStatusOption}`,
+      });
+      // Refresh order data and history
+      await fetchOrderDetail(id);
+    } catch (err: any) {
+      console.error("Gagal mengupdate status:", err);
+      alert(err?.response?.data?.error || "Gagal mengubah status pesanan.");
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
 
   // ── loading ────────────────────────────────────────────────────────────────
 
@@ -516,20 +555,35 @@ export default function OrderDetail() {
                   <button
                     key={status}
                     type="button"
+                    disabled={updatingStatus}
+                    onClick={() => handleUpdateStatus(status)}
                     className={`rounded-md border px-1.5 py-1 text-[9px] font-medium transition ${
                       displayStatus === status
                         ? "border-blue-500 bg-blue-600 text-white"
                         : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                    }`}
+                    } ${updatingStatus ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                   >
                     {status}
                   </button>
                 ))}
               </div>
 
-              <button className="mt-2 text-[10px] font-medium text-rose-500 hover:text-rose-700">
+              <button
+                type="button"
+                disabled={updatingStatus || displayStatus === "Batal"}
+                onClick={() => {
+                  if (confirm("Apakah Anda yakin ingin membatalkan pesanan ini?")) {
+                    handleUpdateStatus("Batal");
+                  }
+                }}
+                className={`mt-2 text-[10px] font-medium text-rose-500 hover:text-rose-700 ${
+                  updatingStatus || displayStatus === "Batal"
+                    ? "opacity-50 cursor-not-allowed"
+                    : "cursor-pointer"
+                }`}
+              >
                 <span className="mr-1">▶</span>
-                Batalkan order...
+                {displayStatus === "Batal" ? "Order sudah dibatalkan" : "Batalkan order..."}
               </button>
             </section>
 
