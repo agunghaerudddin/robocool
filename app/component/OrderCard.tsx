@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type Order = {
   id: number | string;
   day: string;
@@ -27,7 +29,8 @@ const formatRupiah = (amount: number) =>
 
 export default function OrderCard({ order, isFirst = false }: OrderCardProps) {
   return (
-    <div
+    <Link
+      href={`/order/${order.id}`}
       className={`flex min-h-[63px] items-center justify-between gap-3 px-3 py-2.5 transition hover:bg-slate-50 sm:px-4 ${
         !isFirst ? "border-t border-slate-100" : ""
       }`}
@@ -94,6 +97,6 @@ export default function OrderCard({ order, isFirst = false }: OrderCardProps) {
           {formatRupiah(order.amount)}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
