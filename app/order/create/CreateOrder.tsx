@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Section from "@/app/component/Section";
+import Field from "@/app/component/Field";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { getUnits } from "@/app/fetch/get/fetch";
 
 type ServiceItem = {
   service_id: string;
@@ -46,8 +50,6 @@ type UnitItem = {
 const inputClass =
   "w-full min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-const labelClass = "mb-1.5 block text-xs font-medium text-slate-600";
-
 const cardClass =
   "rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5";
 
@@ -60,43 +62,6 @@ const money = (value: number) =>
     currency: "IDR",
     maximumFractionDigits: 0,
   }).format(value || 0);
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <label className={labelClass}>{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function Section({
-  number,
-  title,
-  children,
-}: {
-  number: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={cardClass}>
-      <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-800">
-        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-xs text-blue-700">
-          {number}
-        </span>
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
 
 export default function CreateOrderPage() {
   const [customerId, setCustomerId] = useState("");
@@ -122,6 +87,14 @@ export default function CreateOrderPage() {
   const [commission, setCommission] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [newUnitId, setNewUnitId] = useState<number | null>(null);
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  const [customerCategory, setCustomerCategory] = useState<
+    "Perorangan" | "Perusahaan"
+  >("Perorangan");
+
+  const [addressLabel, setAddressLabel] = useState("Rumah");
 
   const [services, setServices] = useState<ServiceItem[]>([
     {
@@ -294,6 +267,54 @@ export default function CreateOrderPage() {
     }
   }
 
+  useEffect(() => {
+    const getLoggedInUser = async () => {
+      const supabase = getSupabaseBrowserClient();
+
+      const { data, error } = await supabase.auth.getUser();
+
+      if (error || !data.user) {
+        console.error("User not logged in:", error);
+        return;
+      }
+
+      setUserId(data.user.id);
+
+      console.log("Logged in user:", data.user);
+      console.log("User ID:", data.user.id);
+    };
+
+    getLoggedInUser();
+  }, []);
+
+  const hasFetchedUnits = useRef(false);
+
+  useEffect(() => {
+    if (hasFetchedUnits.current) return;
+
+    hasFetchedUnits.current = true;
+
+    const fetchUnits = async () => {
+      try {
+        const response = await getUnits();
+
+        if (!response) return;
+
+        const data = response.data;
+
+        console.log(data, "ini bedengnya");
+
+        setUnits(data);
+      } catch (error) {
+        console.error("Failed to fetch units:", error);
+        hasFetchedUnits.current = false;
+      }
+    };
+
+    fetchUnits();
+  }, []);
+
+  
   return (
     <main className="min-h-screen bg-slate-50 px-3 py-6 text-slate-800 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
@@ -312,88 +333,127 @@ export default function CreateOrderPage() {
           <div className="space-y-5">
             {/* CUSTOMER */}
             <Section number="1" title="Pelanggan">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Nama pelanggan *">
+              {!showNewCustomer ? (
+                /* DEFAULT: CUSTOMER SEARCH */
+                <div className="space-y-2">
                   <input
-                    className={inputClass}
+                    className={inputClass + " w-full"}
+                    placeholder="Ketik nama atau no. WA pelanggan..."
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="Nama pelanggan"
-                    required={!customerId}
                   />
-                </Field>
 
-                <Field label="No. WhatsApp *">
-                  <input
-                    className={inputClass}
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="08xxxxxxxxxx"
-                    required={!customerId}
-                  />
-                </Field>
-              </div>
-
-              <div className="my-4 flex flex-wrap items-center gap-5">
-                {["Langganan", "Invoice"].map((type) => (
-                  <label
-                    key={type}
-                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewCustomer(true);
+                      setCustomerId("");
+                      setCustomerName("");
+                      setPhone("");
+                      setAddress("");
+                      setGoogleMaps("");
+                    }}
+                    className="text-xs font-medium text-blue-600 hover:underline"
                   >
-                    <input
-                      type="radio"
-                      name="customerType"
-                      value={type}
-                      checked={customerType === type}
-                      onChange={(e) => setCustomerType(e.target.value)}
-                      className="accent-blue-600"
-                    />
-                    {type}
-                  </label>
-                ))}
-                <button
-                  type="button"
-                  className="ml-auto text-xs font-medium text-blue-600 hover:underline"
-                  onClick={() => {
-                    setCustomerId("");
-                    setCustomerName("");
-                    setPhone("");
-                    setAddress("");
-                    setGoogleMaps("");
-                  }}
-                >
-                  Pelanggan baru
-                </button>
-              </div>
+                    + Pelanggan baru
+                  </button>
+                </div>
+              ) : (
+                /* NEW CUSTOMER FORM */
+                <div className="space-y-4">
+                  {/* NAME & PHONE */}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Nama pelanggan">
+                      <input
+                        className={inputClass}
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Nama pelanggan"
+                        required
+                      />
+                    </Field>
 
-              <div className="space-y-4">
-                <Field label="Alamat pelanggan">
-                  <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
-                    <input
-                      className={inputClass}
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Kecamatan / kota"
-                    />
-                    <input
-                      className={inputClass}
-                      value={googleMaps}
-                      onChange={(e) => setGoogleMaps(e.target.value)}
-                      placeholder="Link Google Maps (opsional)"
-                    />
+                    <Field label="No. WhatsApp">
+                      <input
+                        className={inputClass}
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="0812..."
+                        required
+                      />
+                    </Field>
                   </div>
-                </Field>
-                <Field label="Alamat lengkap">
-                  <textarea
-                    className={inputClass}
-                    rows={2}
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Nama jalan, nomor rumah, patokan..."
-                  />
-                </Field>
-              </div>
+
+                  {/* CUSTOMER CATEGORY */}
+                  <div className="flex items-center gap-4 text-xs">
+                    {["Perorangan", "Perusahaan"].map((type) => (
+                      <label
+                        key={type}
+                        className="flex cursor-pointer items-center gap-1.5"
+                      >
+                        <input
+                          type="radio"
+                          name="customerCategory"
+                          value={type}
+                          checked={customerCategory === type}
+                          onChange={(e) =>
+                            setCustomerCategory(
+                              e.target.value as "Perorangan" | "Perusahaan",
+                            )
+                          }
+                          className="accent-blue-600"
+                        />
+                        {type}
+                      </label>
+                    ))}
+
+                    <button
+                      type="button"
+                      className="ml-auto text-xs text-slate-500 hover:text-slate-800"
+                      onClick={() => {
+                        setShowNewCustomer(false);
+                        setCustomerId("");
+                        setCustomerName("");
+                        setPhone("");
+                        setAddress("");
+                        setGoogleMaps("");
+                      }}
+                    >
+                      Batal
+                    </button>
+                  </div>
+
+                  {/* VISIT ADDRESS */}
+                  <Field label="Alamat kunjungan">
+                    <div className="space-y-2 rounded-lg bg-slate-50 p-2">
+                      <div className="grid gap-2 sm:grid-cols-[165px_1fr]">
+                        <input
+                          className={inputClass}
+                          value={addressLabel}
+                          onChange={(e) => setAddressLabel(e.target.value)}
+                          placeholder="Rumah"
+                        />
+
+                        <input
+                          className={inputClass}
+                          type="url"
+                          value={googleMaps}
+                          onChange={(e) => setGoogleMaps(e.target.value)}
+                          placeholder="Link Google Maps (opsional)"
+                        />
+                      </div>
+
+                      <textarea
+                        className={inputClass + " min-h-[76px] resize-y"}
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        placeholder="Alamat lengkap"
+                      />
+                    </div>
+                  </Field>
+                </div>
+              )}
             </Section>
 
             {/* SERVICES */}
@@ -1196,52 +1256,17 @@ export default function CreateOrderPage() {
 
           {/* RIGHT SIDEBAR */}
           <aside className="space-y-5 lg:sticky lg:top-5">
-            <Section number="5" title="Pengaturan">
-              <div className="space-y-4">
-                <Field label="Status order">
-                  <select
-                    className={inputClass}
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="new">Baru</option>
-                    <option value="in_progress">Dalam proses</option>
-                    <option value="completed">Selesai</option>
-                    <option value="cancelled">Dibatalkan</option>
-                  </select>
-                </Field>
-                <Field label="Tipe pembayaran">
-                  <select
-                    className={inputClass}
-                    value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value)}
-                  >
-                    <option value="cash">Tunai</option>
-                    <option value="transfer">Transfer</option>
-                    <option value="qris">QRIS</option>
-                    <option value="debt">Belum dibayar / tempo</option>
-                  </select>
-                </Field>
-                <Field label="Status pembayaran">
-                  <select
-                    className={inputClass}
-                    value={paymentStatus}
-                    onChange={(e) => setPaymentStatus(e.target.value)}
-                  >
-                    <option value="unpaid">Belum dibayar</option>
-                    <option value="partial">Dibayar sebagian</option>
-                    <option value="paid">Lunas</option>
-                  </select>
-                </Field>
-                <Field label="Ditugaskan kepada (user ID)">
+            <Section number="5" title="Pelaksana">
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
                   <input
-                    className={inputClass}
-                    value={assignTo}
-                    onChange={(e) => setAssignTo(e.target.value)}
-                    placeholder="ID user / teknisi"
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
                   />
-                </Field>
+                  <span>Bbox</span>
+                </label>
+
+                <span className="text-xs text-slate-500">Teknisi</span>
               </div>
             </Section>
 

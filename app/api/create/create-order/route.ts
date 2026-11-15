@@ -5,20 +5,22 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const {
-      customer_id,
-      user_id,
-      commission_mode,
-      status,
-      payment_type,
-      payment_status,
-      assign_to,
-    } = body;
+    // Ambil data dari root JSON
+    const { user_id, customer, order } = body;
 
-    // Validate required fields
+    // Ambil customer_id dari objek customer
+    const customer_id = customer?.customer_id;
+
+    // Ambil properti dari objek order
+    const { commission_mode, status, payment_type, payment_status, assign_to } =
+      order ?? {};
+
+    // Validasi data wajib
     if (!customer_id || !user_id) {
       return NextResponse.json(
-        { error: "customer_id and user_id are required." },
+        {
+          error: "customer.customer_id and user_id are required.",
+        },
         { status: 400 },
       );
     }
