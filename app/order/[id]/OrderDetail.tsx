@@ -199,6 +199,29 @@ export default function OrderDetail() {
   const beforeInputRef = useRef<HTMLInputElement>(null);
   const afterInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper to obtain current device geolocation
+  const getCurrentLocation = (): Promise<string> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve("GPS tidak didukung oleh browser");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude.toFixed(6);
+          const lng = position.coords.longitude.toFixed(6);
+          resolve(`Lat: ${lat}, Lng: ${lng}`);
+        },
+        (error) => {
+          console.warn("Geolocation warning:", error.message);
+          resolve("GPS tidak diizinkan / dinonaktifkan");
+        },
+        { enableHighAccuracy: true, timeout: 7000, maximumAge: 10000 }
+      );
+    });
+  };
+
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: "before" | "after"
@@ -208,8 +231,16 @@ export default function OrderDetail() {
 
     try {
       setUploadingType(type);
-      // 1. Upload to Cloudinary via backend API
-      const res = await uploadOrderImage(file, type);
+
+      // Get GPS location & current timestamp
+      const location = await getCurrentLocation();
+      const timestamp = new Intl.DateTimeFormat("id-ID", {
+        dateStyle: "full",
+        timeStyle: "medium",
+      }).format(new Date());
+
+      // 1. Upload to Cloudinary with watermark via backend API
+      const res = await uploadOrderImage(file, type, { location, timestamp });
       const imageUrl = res.data.url;
 
       // 2. Save URL into orders table (image_before or image_after)

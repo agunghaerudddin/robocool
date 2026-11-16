@@ -22,10 +22,17 @@ export const updateOrderImage = async (data: UpdateOrderImagePayload) => {
   return await axios.patch("/api/update/update-order-image", data);
 };
 
-export const uploadOrderImage = async (file: File, type: "before" | "after") => {
+export const uploadOrderImage = async (
+  file: File,
+  type: "before" | "after",
+  metadata?: { location?: string; timestamp?: string }
+) => {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("type", type);
+  if (metadata?.location) formData.append("location", metadata.location);
+  if (metadata?.timestamp) formData.append("timestamp", metadata.timestamp);
+
   return await axios.post<{ url: string; publicId: string; folder: string }>(
     "/api/upload",
     formData,
