@@ -21,6 +21,8 @@ export async function GET(
         commission_mode,
         status,
         created_at,
+        image_before,
+        image_after,
         creator:users!orders_user_id_fkey(name),
         assigned_user:users!orders_assign_to_fkey(name),
         customer:customers!orders_customer_id_fkey(name, phone, google_maps, label),

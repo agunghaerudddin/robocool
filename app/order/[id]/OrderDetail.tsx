@@ -1,10 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getOrder } from "@/app/fetch/get/fetch";
-import { updateOrderStatus } from "@/app/fetch/update/fetch";
+import {
+  updateOrderStatus,
+  uploadOrderImage,
+  updateOrderImage,
+} from "@/app/fetch/update/fetch";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -166,6 +171,8 @@ interface OrderData {
   payment_type?: string;
   commission_mode?: string;
   created_at: string;
+  image_before?: string | string[] | null;
+  image_after?: string | string[] | null;
   creator?: { name: string } | null;
   assigned_user?: { name: string } | null;
   customer?: { name: string; phone: string; google_maps?: string; label?: string } | null;
@@ -186,6 +193,62 @@ export default function OrderDetail() {
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingType, setUploadingType] = useState<"before" | "after" | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const beforeInputRef = useRef<HTMLInputElement>(null);
+  const afterInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: "before" | "after"
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+
+    try {
+      setUploadingType(type);
+      // 1. Upload to Cloudinary via backend API
+      const res = await uploadOrderImage(file, type);
+      const imageUrl = res.data.url;
+
+      // 2. Save URL into orders table (image_before or image_after)
+      await updateOrderImage({
+        id,
+        type,
+        url: imageUrl,
+        action: "add",
+      });
+
+      // 3. Refresh order detail
+      await fetchOrderDetail(id);
+    } catch (err: any) {
+      console.error("Gagal mengupload gambar:", err);
+      alert(err?.response?.data?.error || "Gagal mengunggah foto.");
+    } finally {
+      setUploadingType(null);
+      // Reset input value so re-selecting same file triggers onChange
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveImage = async (type: "before" | "after", url: string) => {
+    if (!id) return;
+    if (!confirm("Hapus foto ini?")) return;
+
+    try {
+      await updateOrderImage({
+        id,
+        type,
+        url,
+        action: "remove",
+      });
+      await fetchOrderDetail(id);
+    } catch (err: any) {
+      console.error("Gagal menghapus gambar:", err);
+      alert("Gagal menghapus foto.");
+    }
+  };
 
   const fetchOrderDetail = (orderId: string) => {
     return getOrder(orderId)
@@ -480,24 +543,112 @@ export default function OrderDetail() {
                   )}
 
                 {/* Before & After Photos */}
+                {/* Hidden file inputs */}
+                <input
+                  type="file"
+                  ref={beforeInputRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleImageUpload(e, "before")}
+                />
+                <input
+                  type="file"
+                  ref={afterInputRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleImageUpload(e, "after")}
+                />
+
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  {["Sebelum", "Sesudah"].map((label) => (
-                    <div
-                      key={label}
-                      className="rounded-md border border-dashed border-slate-300 p-1.5"
-                    >
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="text-[9px] text-slate-600">{label}</span>
-                        <span className="text-[9px] text-red-500">belum ada</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="flex h-7 w-full items-center justify-center gap-1 rounded border border-slate-200 bg-white text-[9px] font-medium text-slate-500 hover:bg-slate-50"
+                  {[
+                    {
+                      label: "Sebelum",
+                      type: "before" as const,
+                      inputRef: beforeInputRef,
+                      images: Array.isArray(order.image_before)
+                        ? order.image_before
+                        : order.image_before
+                        ? [order.image_before]
+                        : [],
+                    },
+                    {
+                      label: "Sesudah",
+                      type: "after" as const,
+                      inputRef: afterInputRef,
+                      images: Array.isArray(order.image_after)
+                        ? order.image_after
+                        : order.image_after
+                        ? [order.image_after]
+                        : [],
+                    },
+                  ].map(({ label, type, inputRef, images }) => {
+                    const isUploading = uploadingType === type;
+
+                    return (
+                      <div
+                        key={label}
+                        className="rounded-md border border-dashed border-slate-300 p-2 bg-slate-50/50"
                       >
-                        ▧ Tambah foto
-                      </button>
-                    </div>
-                  ))}
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <span className="text-[10px] font-semibold text-slate-700">
+                            {label}
+                          </span>
+                          {images.length === 0 ? (
+                            <span className="text-[9px] text-red-500">belum ada</span>
+                          ) : (
+                            <span className="text-[9px] text-emerald-600 font-medium">
+                              {images.length} foto
+                            </span>
+                          )}
+                        </div>
+
+                        {/* List of images */}
+                        {images.length > 0 && (
+                          <div className="mb-2 grid grid-cols-2 gap-1.5">
+                            {images.map((imgUrl, i) => (
+                              <div
+                                key={i}
+                                className="group relative aspect-video w-full overflow-hidden rounded border border-slate-200 bg-slate-100"
+                              >
+                                <img
+                                  src={imgUrl}
+                                  alt={`${label} ${i + 1}`}
+                                  className="h-full w-full object-cover cursor-pointer hover:opacity-95 transition"
+                                  onClick={() => setPreviewImage(imgUrl)}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveImage(type, imgUrl);
+                                  }}
+                                  className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-[9px] text-white opacity-0 group-hover:opacity-100 transition hover:bg-rose-600"
+                                  title="Hapus foto"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={isUploading}
+                          onClick={() => inputRef.current?.click()}
+                          className="flex h-7 w-full items-center justify-center gap-1 rounded border border-slate-200 bg-white text-[9px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 cursor-pointer shadow-xs transition"
+                        >
+                          {isUploading ? (
+                            <span>Mengunggah...</span>
+                          ) : (
+                            <>
+                              <span>▧</span> Tambah foto {label}
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -631,6 +782,29 @@ export default function OrderDetail() {
           </div>
         </div>
       </div>
+
+      {/* Lightbox / Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-lg bg-black">
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black"
+            >
+              ✕
+            </button>
+            <img
+              src={previewImage}
+              alt="Preview"
+              className="max-h-[85vh] max-w-[90vw] object-contain"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
