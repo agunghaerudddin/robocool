@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import cloudinary from "@/lib/cloudinary";
 import type { UploadApiResponse } from "cloudinary";
+import sharp from "sharp";
 
 export async function POST(req: Request) {
   try {
@@ -15,16 +16,27 @@ export async function POST(req: Request) {
     // Determine target folder based on type
     const folder = type === "after" ? "robocool/after" : "robocool/before";
 
-    // Convert file to base64 buffer for Cloudinary upload
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const base64Data = `data:${file.type || "image/jpeg"};base64,${buffer.toString("base64")}`;
+    // Read the file buffer
+    const arrayBuffer = await file.arrayBuffer();
+    const inputBuffer = Buffer.from(arrayBuffer);
 
+    // Compress & convert image to WebP using sharp
+    // Also auto-rotate based on EXIF and cap max resolution to 1920px
+    const webpBuffer = await sharp(inputBuffer)
+      .rotate()
+      .resize({ width: 1920, height: 1920, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    const base64Data = `data:image/webp;base64,${webpBuffer.toString("base64")}`;
+
+    // Upload to Cloudinary with format: "webp"
     const uploadResult = await new Promise<UploadApiResponse>((resolve, reject) => {
       cloudinary.uploader.upload(
         base64Data,
         {
           folder: folder,
+          format: "webp",
           resource_type: "image",
         },
         (error, result) => {
@@ -38,6 +50,8 @@ export async function POST(req: Request) {
       url: uploadResult.secure_url,
       publicId: uploadResult.public_id,
       folder: uploadResult.folder,
+      format: uploadResult.format,
+      bytes: uploadResult.bytes,
     });
   } catch (error: any) {
     console.error("Cloudinary upload failed:", error);
