@@ -574,11 +574,12 @@ export default function OrderDetail() {
                   )}
 
                 {/* Before & After Photos */}
-                {/* Hidden file inputs */}
+                {/* Hidden file inputs configured to directly open the camera */}
                 <input
                   type="file"
                   ref={beforeInputRef}
                   accept="image/*"
+                  capture="environment"
                   className="hidden"
                   onChange={(e) => handleImageUpload(e, "before")}
                 />
@@ -586,6 +587,7 @@ export default function OrderDetail() {
                   type="file"
                   ref={afterInputRef}
                   accept="image/*"
+                  capture="environment"
                   className="hidden"
                   onChange={(e) => handleImageUpload(e, "after")}
                 />
@@ -667,13 +669,13 @@ export default function OrderDetail() {
                           type="button"
                           disabled={isUploading}
                           onClick={() => inputRef.current?.click()}
-                          className="flex h-7 w-full items-center justify-center gap-1 rounded border border-slate-200 bg-white text-[9px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 cursor-pointer shadow-xs transition"
+                          className="flex h-7 w-full items-center justify-center gap-1.5 rounded border border-blue-200 bg-blue-50/70 text-[9px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 cursor-pointer shadow-xs transition"
                         >
                           {isUploading ? (
-                            <span>Mengunggah...</span>
+                            <span>Memproses &amp; Mengunggah...</span>
                           ) : (
                             <>
-                              <span>▧</span> Tambah foto {label}
+                              <span>📷</span> Ambil Foto Langsung {label}
                             </>
                           )}
                         </button>
