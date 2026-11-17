@@ -17,7 +17,7 @@ export async function GET() {
       assigned_user:users!orders_assign_to_fkey(name),
 
       customer_id,
-      customer:customers!orders_customer_id_fkey(name, phone),
+      customer:customers!orders_customer_id_fkey(name, phone, google_maps, label),
 
       service_orders(
         *,

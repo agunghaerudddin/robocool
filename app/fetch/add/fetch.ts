@@ -66,6 +66,13 @@ export type ComplaintSchedulePayload = {
   notes?: string | null;
 };
 
+export type ServicePayload = {
+  name: string;
+  price: number;
+  warranty?: number | null;
+  estimate?: number | null;
+};
+
 export type AssignmentPayload = {
   order_id: string | number;
   assigned_to: string;
@@ -123,4 +130,8 @@ export const createOrderHistory = async (data: OrderHistoryPayload) => {
 
 export const createAssignment = async (data: AssignmentPayload) => {
   return await axios.post("/api/create/create-assignments", data);
+};
+
+export const createService = async (data: ServicePayload) => {
+  return await axios.post("/api/create/create-service", data);
 };
