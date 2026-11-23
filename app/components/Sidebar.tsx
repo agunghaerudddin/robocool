@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -21,8 +21,68 @@ const menuItems = [
   { label: "Tambah Pengguna", icon: UserRound, href: "/buat-akun" },
 ];
 
-export default function Sidebar() {
+function NavLinks({ isOpen }: { isOpen: boolean }) {
   const pathname = usePathname();
+
+  return (
+    <>
+      {menuItems.map(({ label, icon: Icon, href }) => {
+        const isActive =
+          pathname === href || (pathname ? pathname.startsWith(href + "/") : false);
+
+        return (
+          <Link
+            key={label}
+            href={href}
+            title={!isOpen ? label : undefined}
+            className={`flex min-h-[52px] w-full items-center rounded-xl transition-colors duration-200 ${
+              isOpen ? "gap-4 px-3" : "justify-center px-0"
+            } ${
+              isActive
+                ? "bg-[#F3F3F4] text-black"
+                : "text-[#777783] hover:bg-gray-50"
+            }`}
+          >
+            <Icon size={23} strokeWidth={2} className="shrink-0" />
+
+            {isOpen && (
+              <span className="truncate text-left text-[14px] font-normal">
+                {label}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </>
+  );
+}
+
+function NavLinksFallback({ isOpen }: { isOpen: boolean }) {
+  return (
+    <>
+      {menuItems.map(({ label, icon: Icon, href }) => (
+        <Link
+          key={label}
+          href={href}
+          title={!isOpen ? label : undefined}
+          className={`flex min-h-[52px] w-full items-center rounded-xl text-[#777783] transition-colors duration-200 hover:bg-gray-50 ${
+            isOpen ? "gap-4 px-3" : "justify-center px-0"
+          }`}
+        >
+          <Icon size={23} strokeWidth={2} className="shrink-0" />
+
+          {isOpen && (
+            <span className="truncate text-left text-[14px] font-normal">
+              {label}
+            </span>
+          )}
+        </Link>
+      ))}
+    </>
+  );
+}
+
+export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
@@ -59,33 +119,9 @@ export default function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-5">
-          {menuItems.map(({ label, icon: Icon, href }) => {
-            const isActive =
-              pathname === href || pathname.startsWith(href + "/");
-
-            return (
-              <Link
-                key={label}
-                href={href}
-                title={!isOpen ? label : undefined}
-                className={`flex min-h-[52px] w-full items-center rounded-xl transition-colors duration-200 ${
-                  isOpen ? "gap-4 px-3" : "justify-center px-0"
-                } ${
-                  isActive
-                    ? "bg-[#F3F3F4] text-black"
-                    : "text-[#777783] hover:bg-gray-50"
-                }`}
-              >
-                <Icon size={23} strokeWidth={2} className="shrink-0" />
-
-                {isOpen && (
-                  <span className="truncate text-left text-[14px] font-normal">
-                    {label}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+          <Suspense fallback={<NavLinksFallback isOpen={isOpen} />}>
+            <NavLinks isOpen={isOpen} />
+          </Suspense>
         </nav>
 
         {/* Logout */}
