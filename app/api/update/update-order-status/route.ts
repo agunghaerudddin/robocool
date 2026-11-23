@@ -4,21 +4,27 @@ import { NextResponse } from "next/server";
 export async function PATCH(req: Request) {
   try {
     const body = await req.json();
-    const { id, status, notes } = body;
+    const { id, status, notes, payment_status, payment_type, paid_to } = body;
 
-    if (!id || !status) {
+    if (!id || (!status && !payment_status && !payment_type && !paid_to)) {
       return NextResponse.json(
-        { error: "id and status are required." },
+        { error: "id and at least one field to update are required." },
         { status: 400 }
       );
     }
 
     const supabase = createSupabaseAdmin();
 
-    // 1. Update status on orders table
+    const updateFields: Record<string, any> = {};
+    if (status) updateFields.status = status;
+    if (payment_status) updateFields.payment_status = payment_status;
+    if (payment_type) updateFields.payment_type = payment_type;
+    if (paid_to !== undefined) updateFields.paid_to = paid_to;
+
+    // 1. Update fields on orders table
     const { data: updatedOrder, error: updateError } = await supabase
       .from("orders")
-      .update({ status })
+      .update(updateFields)
       .eq("id", id)
       .select()
       .single();
@@ -31,39 +37,43 @@ export async function PATCH(req: Request) {
       );
     }
 
-    // 2. Insert into order_history
-    const nowIso = new Date().toISOString();
-    const historyPayloadVariants = [
-      {
-        order_id: id,
-        date_start: nowIso,
-        status: status,
-        notes: notes || `Status diubah menjadi ${status}`,
-        create_at: nowIso,
-        updated_at: nowIso,
-      },
-      {
-        order_id: id,
-        date_start: nowIso,
-        status: status,
-        notes: notes || `Status diubah menjadi ${status}`,
-        created_at: nowIso,
-        updated_at: nowIso,
-      },
-      {
-        order_id: id,
-        date_start: nowIso,
-        status: status,
-        notes: notes || `Status diubah menjadi ${status}`,
-      },
-    ];
+    // 2. Insert into order_history if status is changed or notes provided
+    if (status || notes) {
+      const historyStatus = status || updatedOrder?.status || "update";
+      const defaultNote = status ? `Status diubah menjadi ${status}` : "Pembaruan pesanan";
+      const nowIso = new Date().toISOString();
+      const historyPayloadVariants = [
+        {
+          order_id: id,
+          date_start: nowIso,
+          status: historyStatus,
+          notes: notes || defaultNote,
+          create_at: nowIso,
+          updated_at: nowIso,
+        },
+        {
+          order_id: id,
+          date_start: nowIso,
+          status: historyStatus,
+          notes: notes || defaultNote,
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+        {
+          order_id: id,
+          date_start: nowIso,
+          status: historyStatus,
+          notes: notes || defaultNote,
+        },
+      ];
 
-    for (const payload of historyPayloadVariants) {
-      const { error: histErr } = await supabase
-        .from("order_history")
-        .insert(payload);
-      if (!histErr) {
-        break;
+      for (const payload of historyPayloadVariants) {
+        const { error: histErr } = await supabase
+          .from("order_history")
+          .insert(payload);
+        if (!histErr) {
+          break;
+        }
       }
     }
 

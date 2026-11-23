@@ -2,8 +2,11 @@ import axios from "axios";
 
 export type UpdateOrderStatusPayload = {
   id: string;
-  status: string;
+  status?: string;
   notes?: string | null;
+  payment_status?: string;
+  payment_type?: string;
+  paid_to?: string | null;
 };
 
 export const updateOrderStatus = async (data: UpdateOrderStatusPayload) => {

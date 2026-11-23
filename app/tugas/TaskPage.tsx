@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getOrders, getServices } from "../fetch/get/fetch";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { ArrowRight, CornerDownRight, MapPin } from "lucide-react";
 
 type TaskItem = {
   id: number | string;
@@ -26,6 +27,21 @@ export default function TaskPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<{ id: string; email?: string } | null>(null);
+  const [todayDateStr, setTodayDateStr] = useState("");
+  const [currentDate, setCurrentDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const d = new Date();
+    setCurrentDate(d);
+    setTodayDateStr(
+      d.toLocaleDateString("id-ID", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    );
+  }, []);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -226,19 +242,9 @@ export default function TaskPage() {
     }
   };
 
-  const todayDateStr = useMemo(() => {
-    const d = new Date();
-    return d.toLocaleDateString("id-ID", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  }, []);
-
   // Split tasks into sections
   const { todayAndPending, upcoming, recentlyCompleted } = useMemo(() => {
-    const today = new Date();
+    const today = currentDate ? new Date(currentDate) : new Date(0);
     today.setHours(0, 0, 0, 0);
 
     const todayAndPendingList: TaskItem[] = [];
@@ -296,13 +302,12 @@ export default function TaskPage() {
       upcoming: upcomingList,
       recentlyCompleted: completedList,
     };
-  }, [tasks]);
+  }, [tasks, currentDate]);
 
   // Summaries calculation
   const { monthlyCommission, unpaidAmount, cashHeld } = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const currentMonth = currentDate ? currentDate.getMonth() : -1;
+    const currentYear = currentDate ? currentDate.getFullYear() : -1;
 
     let commission = 0;
     let unpaid = 0;
@@ -346,7 +351,7 @@ export default function TaskPage() {
       unpaidAmount: unpaid,
       cashHeld: cash,
     };
-  }, [tasks]);
+  }, [tasks, currentDate]);
 
   const formatRupiah = (amount: number) =>
     `Rp ${amount.toLocaleString("id-ID")}`;
@@ -361,9 +366,9 @@ export default function TaskPage() {
           </div>
           <Link
             href="/order"
-            className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
+            className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
           >
-            Semua Order →
+            Semua Order <ArrowRight className="h-3 w-3" />
           </Link>
         </header>
 
@@ -440,14 +445,14 @@ export default function TaskPage() {
                           </div>
                         </div>
 
-                        <p className="mt-1 text-[10px] text-slate-600">
-                          <span className="mr-1 text-slate-400">↳</span>
+                        <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-600">
+                          <CornerDownRight className="h-3 w-3 shrink-0 text-slate-400" />
                           {task.service}
                         </p>
 
                         {task.address && (
                           <p className="mt-1 flex items-start gap-1 text-[10px] leading-relaxed text-slate-500">
-                            <span className="text-rose-500">♦</span>
+                            <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-rose-500" />
                             {task.address}
                           </p>
                         )}
