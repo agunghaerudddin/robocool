@@ -11,14 +11,31 @@ import {
   UserRound,
   LogOut,
   Menu,
+  Wallet,
 } from "lucide-react";
 
 const menuItems = [
-  { label: "Dashboard", shortLabel: "Dashboard", icon: House, href: "/dashboard" },
+  {
+    label: "Dashboard",
+    shortLabel: "Dashboard",
+    icon: House,
+    href: "/dashboard",
+  },
   { label: "Order", shortLabel: "Order", icon: FileText, href: "/order" },
   { label: "Tugas", shortLabel: "Tugas", icon: ClipboardList, href: "/tugas" },
   { label: "Layanan", shortLabel: "Layanan", icon: Wrench, href: "/layanan" },
-  { label: "Tambah Pengguna", shortLabel: "Pengguna", icon: UserRound, href: "/buat-akun" },
+  {
+    label: "Tambah Pengguna",
+    shortLabel: "Pengguna",
+    icon: UserRound,
+    href: "/buat-akun",
+  },
+  {
+    label: "Keuangan",
+    shortLabel: "Keuangan",
+    icon: Wallet,
+    href: "/keuangan",
+  },
 ];
 
 function NavLinks({ isOpen }: { isOpen: boolean }) {
@@ -28,7 +45,8 @@ function NavLinks({ isOpen }: { isOpen: boolean }) {
     <>
       {menuItems.map(({ label, icon: Icon, href }) => {
         const isActive =
-          pathname === href || (pathname ? pathname.startsWith(href + "/") : false);
+          pathname === href ||
+          (pathname ? pathname.startsWith(href + "/") : false);
 
         return (
           <Link
@@ -46,9 +64,7 @@ function NavLinks({ isOpen }: { isOpen: boolean }) {
             <Icon size={23} strokeWidth={2} className="shrink-0" />
 
             {isOpen && (
-              <span className="truncate text-left text-[14px]">
-                {label}
-              </span>
+              <span className="truncate text-left text-[14px]">{label}</span>
             )}
           </Link>
         );
@@ -72,9 +88,7 @@ function NavLinksFallback({ isOpen }: { isOpen: boolean }) {
           <Icon size={23} strokeWidth={2} className="shrink-0" />
 
           {isOpen && (
-            <span className="truncate text-left text-[14px]">
-              {label}
-            </span>
+            <span className="truncate text-left text-[14px]">{label}</span>
           )}
         </Link>
       ))}
@@ -89,7 +103,8 @@ function BottomNavLinks() {
     <div className="flex h-16 w-full items-center justify-around px-2">
       {menuItems.map(({ label, shortLabel, icon: Icon, href }) => {
         const isActive =
-          pathname === href || (pathname ? pathname.startsWith(href + "/") : false);
+          pathname === href ||
+          (pathname ? pathname.startsWith(href + "/") : false);
 
         return (
           <Link
@@ -156,9 +171,7 @@ export default function Sidebar() {
           isOpen ? "w-[266px]" : "w-[92px]"
         }`}
       >
-        <aside
-          className="flex h-full flex-col overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-sm"
-        >
+        <aside className="flex h-full flex-col overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-sm">
           {/* Header */}
           <div
             className={`flex h-[90px] shrink-0 items-center border-b border-gray-100 ${

@@ -7,6 +7,7 @@ export async function GET() {
       id,
       user_id,
       assign_to,
+      paid_to,
       payment_status,
       payment_type,
       commission_mode,
@@ -15,6 +16,7 @@ export async function GET() {
 
       creator:users!orders_user_id_fkey(name),
       assigned_user:users!orders_assign_to_fkey(name),
+      paid_to_user:users!orders_paid_to_fkey(name),
 
       customer_id,
       customer:customers!orders_customer_id_fkey(name, phone, google_maps, label),
