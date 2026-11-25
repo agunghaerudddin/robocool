@@ -135,3 +135,33 @@ export const createAssignment = async (data: AssignmentPayload) => {
 export const createService = async (data: ServicePayload) => {
   return await axios.post("/api/create/create-service", data);
 };
+
+export type CreateOfferPayload = {
+  customer_id?: string | null;
+  company: string;
+  recipient?: string | null;
+  address?: string | null;
+  letter_date: string;
+  subject: string;
+  opening?: string | null;
+  subtotal: number;
+  include_tax: boolean;
+  tax: number;
+  total: number;
+  valid_days: number;
+  terms?: string | null;
+  signer?: string | null;
+  position?: string | null;
+  status?: string;
+  items: Array<{
+    description: string;
+    quantity: number;
+    unit: string;
+    price: number;
+  }>;
+};
+
+export const createOffer = async (data: CreateOfferPayload) => {
+  return await axios.post("/api/create/create-offer", data);
+};
+

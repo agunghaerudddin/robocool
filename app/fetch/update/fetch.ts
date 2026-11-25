@@ -46,3 +46,8 @@ export const uploadOrderImage = async (
     }
   );
 };
+
+export const deleteOffer = async (id: string | number) => {
+  return await axios.delete(`/api/get/get-offer/${id}`);
+};
+

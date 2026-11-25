@@ -65,3 +65,22 @@ export const getOrder = async (id: string) => {
     console.error("Failed to fetch order", error);
   }
 };
+
+export const getOffers = async () => {
+  try {
+    const res = await axios.get("/api/get/get-offers");
+    return res;
+  } catch (error) {
+    console.error("Failed to fetch offers", error);
+  }
+};
+
+export const getOffer = async (id: string) => {
+  try {
+    const res = await axios.get(`/api/get/get-offer/${id}`);
+    return res;
+  } catch (error) {
+    console.error("Failed to fetch offer", error);
+  }
+};
+

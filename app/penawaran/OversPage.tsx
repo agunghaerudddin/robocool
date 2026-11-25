@@ -1,27 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getOffers } from "@/app/fetch/get/fetch";
 
 type Offer = {
-  id: number;
+  id: number | string;
   number: string;
-  date: string;
-  recipient: string;
+  letter_date: string;
+  company: string;
+  recipient?: string | null;
   subject: string;
   total: number;
+  status?: string;
+  customer?: {
+    name: string;
+    phone: string;
+  } | null;
 };
-
-const initialOffers: Offer[] = [
-  {
-    id: 1,
-    number: "001/SPH/XI/2026",
-    date: "25 Nov 2026",
-    recipient: "Agung",
-    subject: "Penawaran Harga Jasa Service AC",
-    total: 166500,
-  },
-];
 
 const formatRupiah = (value: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -32,16 +28,56 @@ const formatRupiah = (value: number) =>
     .format(value)
     .replace(/\u00a0/g, " ");
 
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+};
+
 export default function OffersPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [offers] = useState<Offer[]>(initialOffers);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredOffers = offers.filter((offer) =>
-    [offer.number, offer.date, offer.recipient, offer.subject].some((value) =>
-      value.toLowerCase().includes(search.toLowerCase()),
-    ),
-  );
+  useEffect(() => {
+    fetchOffersList();
+  }, []);
+
+  const fetchOffersList = async () => {
+    try {
+      setLoading(true);
+      const res = await getOffers();
+      if (res?.data && Array.isArray(res.data)) {
+        setOffers(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch offers:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredOffers = offers.filter((offer) => {
+    const q = search.toLowerCase();
+    const num = (offer.number || "").toLowerCase();
+    const comp = (offer.company || "").toLowerCase();
+    const subj = (offer.subject || "").toLowerCase();
+    const recip = (offer.recipient || "").toLowerCase();
+    const cust = (offer.customer?.name || "").toLowerCase();
+    return (
+      num.includes(q) ||
+      comp.includes(q) ||
+      subj.includes(q) ||
+      recip.includes(q) ||
+      cust.includes(q)
+    );
+  });
 
   return (
     <main className="min-h-screen bg-[#f7f9fc] px-4 py-5 text-slate-800 sm:px-6">
@@ -53,13 +89,13 @@ export default function OffersPage() {
               Surat Penawaran
             </h1>
             <p className="mt-1 text-xs text-slate-500">
-              {offers.length} surat tersimpan
+              {offers.length} surat tersimpan di database
             </p>
           </div>
 
           <button
             type="button"
-            onClick={() => router.push("/offers/create")}
+            onClick={() => router.push("/penawaran/create")}
             className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
           >
             + Buat Penawaran
@@ -75,7 +111,7 @@ export default function OffersPage() {
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Cari nomor, tujuan, atau perihal..."
+            placeholder="Cari nomor, perusahaan, penerima, perihal..."
             className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-xs outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
 
@@ -103,41 +139,62 @@ export default function OffersPage() {
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-                {filteredOffers.length > 0 ? (
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-3 py-10 text-center text-xs text-slate-400"
+                    >
+                      Memuat data surat penawaran...
+                    </td>
+                  </tr>
+                ) : filteredOffers.length > 0 ? (
                   filteredOffers.map((offer) => (
-                    <tr key={offer.id} className="transition hover:bg-slate-50">
+                    <tr
+                      key={offer.id}
+                      onClick={() => router.push(`/penawaran/${offer.id}`)}
+                      className="cursor-pointer transition hover:bg-slate-50"
+                    >
                       <td className="whitespace-nowrap px-3 py-3 font-medium text-blue-700">
                         {offer.number}
                       </td>
 
                       <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                        {offer.date}
+                        {formatDate(offer.letter_date)}
                       </td>
 
-                      <td className="px-3 py-3">{offer.recipient}</td>
+                      <td className="px-3 py-3">
+                        <span className="font-semibold text-slate-800">
+                          {offer.company}
+                        </span>
+                        {offer.recipient && (
+                          <span className="block text-[11px] text-slate-400">
+                            u.p. {offer.recipient}
+                          </span>
+                        )}
+                      </td>
 
                       <td className="px-3 py-3 text-slate-600">
                         {offer.subject}
                       </td>
 
-                      <td className="whitespace-nowrap px-3 py-3 text-right font-medium">
-                        {formatRupiah(offer.total)}
+                      <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-900">
+                        {formatRupiah(Number(offer.total) || 0)}
                       </td>
 
-                      <td className="px-3 py-3 text-center">
+                      <td
+                        className="px-3 py-3 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
                           type="button"
-                          onClick={() =>
-                            window.alert(
-                              `Fitur PDF untuk ${offer.number} belum dihubungkan.`,
-                            )
-                          }
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800"
+                          onClick={() => router.push(`/penawaran/${offer.id}`)}
+                          className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            width="13"
-                            height="13"
+                            width="12"
+                            height="12"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
@@ -145,12 +202,10 @@ export default function OffersPage() {
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           >
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <path d="M14 2v6h6" />
-                            <path d="M8 13h8" />
-                            <path d="M8 17h5" />
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
                           </svg>
-                          PDF
+                          Detail / Cetak
                         </button>
                       </td>
                     </tr>
@@ -161,7 +216,11 @@ export default function OffersPage() {
                       colSpan={6}
                       className="px-3 py-10 text-center text-slate-500"
                     >
-                      Tidak ada surat penawaran yang ditemukan.
+                      Belum ada surat penawaran. Klik tombol{" "}
+                      <span className="font-semibold text-blue-600">
+                        + Buat Penawaran
+                      </span>{" "}
+                      untuk menambahkan.
                     </td>
                   </tr>
                 )}
