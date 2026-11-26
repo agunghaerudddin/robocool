@@ -84,3 +84,13 @@ export const getOffer = async (id: string) => {
   }
 };
 
+export const getDashboardData = async () => {
+  try {
+    const res = await axios.get("/api/get/get-dashboard");
+    return res;
+  } catch (error) {
+    console.error("Failed to fetch dashboard data", error);
+  }
+};
+
+
