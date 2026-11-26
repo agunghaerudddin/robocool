@@ -44,6 +44,12 @@ const menuItems = [
     icon: Wallet,
     href: "/penawaran",
   },
+  {
+    label: "Komisi",
+    shortLabel: "Komisi",
+    icon: Wallet,
+    href: "/komisi",
+  },
 ];
 
 function NavLinks({
@@ -57,7 +63,7 @@ function NavLinks({
 
   // Filter items based on user role if available
   const visibleItems = menuItems.filter((item) =>
-    userRole !== null ? hasPermission(item.href, userRole) : true
+    userRole !== null ? hasPermission(item.href, userRole) : true,
   );
 
   return (
@@ -121,7 +127,7 @@ function BottomNavLinks({ userRole }: { userRole: number | null }) {
   const pathname = usePathname();
 
   const visibleItems = menuItems.filter((item) =>
-    userRole !== null ? hasPermission(item.href, userRole) : true
+    userRole !== null ? hasPermission(item.href, userRole) : true,
   );
 
   return (
@@ -275,7 +281,9 @@ export default function Sidebar() {
             >
               <LogOut size={20} className="shrink-0" />
 
-              {isOpen && <span className="text-[12px] font-medium">Keluar</span>}
+              {isOpen && (
+                <span className="text-[12px] font-medium">Keluar</span>
+              )}
             </button>
           </div>
         </aside>
