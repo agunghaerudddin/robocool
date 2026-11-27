@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Wallet,
@@ -9,13 +9,12 @@ import {
   CheckCircle2,
   RefreshCw,
   Calendar,
-  ArrowUpRight,
-  ArrowDownRight,
   Receipt,
-  ChevronDown,
   Filter,
   BriefcaseBusiness,
 } from "lucide-react";
+import { getCommissions } from "@/app/fetch/get/fetch";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 
 type CommissionStatus = "Dibayarkan" | "Menunggu" | "Diproses";
 
@@ -38,92 +37,16 @@ const formatRupiah = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const formatDate = (value: string) =>
-  new Date(`${value}T00:00:00`).toLocaleDateString("id-ID", {
+const formatDate = (value: string) => {
+  if (!value) return "-";
+  const dateObj = new Date(value.includes("T") ? value : `${value}T00:00:00`);
+  if (isNaN(dateObj.getTime())) return value;
+  return dateObj.toLocaleDateString("id-ID", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
-
-const sampleCommissions: CommissionItem[] = [
-  {
-    id: "1",
-    invoice: "INV-00042",
-    customer: "Budi Santoso",
-    service: "Cuci AC 1 PK",
-    date: "2026-11-25",
-    orderTotal: 150000,
-    commissionRate: 15,
-    commissionAmount: 22500,
-    status: "Dibayarkan",
-  },
-  {
-    id: "2",
-    invoice: "INV-00039",
-    customer: "Andi Pratama",
-    service: "Perbaikan AC",
-    date: "2026-11-24",
-    orderTotal: 450000,
-    commissionRate: 10,
-    commissionAmount: 45000,
-    status: "Menunggu",
-  },
-  {
-    id: "3",
-    invoice: "INV-00035",
-    customer: "Siti Rahma",
-    service: "Pasang AC 1 PK",
-    date: "2026-11-22",
-    orderTotal: 850000,
-    commissionRate: 15,
-    commissionAmount: 127500,
-    status: "Dibayarkan",
-  },
-  {
-    id: "4",
-    invoice: "INV-00031",
-    customer: "Hasanuddin",
-    service: "Tambah Freon",
-    date: "2026-11-19",
-    orderTotal: 300000,
-    commissionRate: 10,
-    commissionAmount: 30000,
-    status: "Diproses",
-  },
-  {
-    id: "5",
-    invoice: "INV-00027",
-    customer: "Dewi Anggraini",
-    service: "Cuci AC 2 PK",
-    date: "2026-11-15",
-    orderTotal: 200000,
-    commissionRate: 15,
-    commissionAmount: 30000,
-    status: "Dibayarkan",
-  },
-  {
-    id: "6",
-    invoice: "INV-00021",
-    customer: "Rudi Hartono",
-    service: "Pemeriksaan AC",
-    date: "2026-10-28",
-    orderTotal: 250000,
-    commissionRate: 10,
-    commissionAmount: 25000,
-    status: "Dibayarkan",
-  },
-  {
-    id: "7",
-    invoice: "INV-00018",
-    customer: "Nur Aisyah",
-    service: "Perbaikan AC",
-    date: "2026-10-20",
-    orderTotal: 600000,
-    commissionRate: 15,
-    commissionAmount: 90000,
-    status: "Menunggu",
-  },
-];
+};
 
 const statusStyles: Record<CommissionStatus, string> = {
   Dibayarkan: "bg-emerald-50 text-emerald-700",
@@ -134,10 +57,78 @@ const statusStyles: Record<CommissionStatus, string> = {
 export default function CommissionPage() {
   const [filter, setFilter] = useState("Semua");
   const [period, setPeriod] = useState("Bulan ini");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [commissions, setCommissions] = useState<CommissionItem[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role?: number } | null>(null);
 
-  // UI-only data. Replace with the logged-in user's API response.
-  const commissions = sampleCommissions;
+  // Get current logged-in user to filter personal commissions if partner
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (data?.user) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+
+        setCurrentUser({
+          id: data.user.id,
+          role: profile?.role,
+        });
+      }
+    });
+  }, []);
+
+  const fetchCommissionData = async () => {
+    setLoading(true);
+    try {
+      // If user is Role 4 (Mitra), only fetch their own commission
+      const params: Record<string, string> = {};
+      if (currentUser?.role === 4) {
+        params.user_id = currentUser.id;
+      }
+
+      const res = await getCommissions(params);
+      if (res?.data?.commissions) {
+        const mapped: CommissionItem[] = res.data.commissions.map((item: any) => {
+          let statusLabel: CommissionStatus = "Menunggu";
+          const lowerStatus = String(item.status || "").toLowerCase();
+          if (lowerStatus === "paid" || lowerStatus === "dibayarkan") {
+            statusLabel = "Dibayarkan";
+          } else if (lowerStatus === "approved" || lowerStatus === "processing" || lowerStatus === "diproses") {
+            statusLabel = "Diproses";
+          }
+
+          const serviceName =
+            item.order?.service_orders?.[0]?.service?.name ||
+            item.notes ||
+            "Layanan";
+
+          return {
+            id: item.id,
+            invoice: item.order?.id ? `INV-${String(item.order.id).slice(0, 8)}` : `COM-${String(item.id).slice(0, 6)}`,
+            customer: item.order?.customer?.name || "Pelanggan",
+            service: serviceName,
+            date: item.earned_at ? item.earned_at.split("T")[0] : (item.period_start || ""),
+            orderTotal: Number(item.base_amount || 0),
+            commissionRate: Number(item.rate_applied || 0),
+            commissionAmount: Number(item.commission_amount || 0),
+            status: statusLabel,
+          };
+        });
+        setCommissions(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load commissions:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCommissionData();
+  }, [currentUser]);
 
   const visibleCommissions = useMemo(() => {
     const now = new Date();
@@ -215,11 +206,6 @@ export default function CommissionPage() {
 
   const maxMonthlyTotal = Math.max(...monthlyData.map((item) => item.total), 1);
 
-  const handleRefresh = () => {
-    setLoading(true);
-    setTimeout(() => setLoading(false), 400);
-  };
-
   return (
     <div className="min-h-screen bg-[#f6f8fc] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1400px] space-y-5">
@@ -235,7 +221,7 @@ export default function CommissionPage() {
           </div>
 
           <button
-            onClick={handleRefresh}
+            onClick={fetchCommissionData}
             disabled={loading}
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
           >
@@ -378,7 +364,7 @@ export default function CommissionPage() {
                 })}
               </div>
               <p className="mt-3 text-[9px] text-slate-400">
-                Nilai berdasarkan data komisi contoh.
+                Nilai berdasarkan data riwayat komisi.
               </p>
             </div>
           </div>

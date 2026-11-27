@@ -93,4 +93,19 @@ export const getDashboardData = async () => {
   }
 };
 
+export const getCommissions = async (params?: {
+  user_id?: string;
+  status?: string;
+  period_start?: string;
+  period_end?: string;
+}) => {
+  try {
+    const res = await axios.get("/api/get/get-commissions", { params });
+    return res;
+  } catch (error) {
+    console.error("Failed to fetch commissions", error);
+  }
+};
+
+
 
