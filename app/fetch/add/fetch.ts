@@ -14,6 +14,7 @@ export type OrderPayload = {
   payment_type?: string | null;
   payment_status?: string;
   assign_to?: string | null;
+  paid_to?: string | null;
 };
 
 export type ServiceOrderPayload = {

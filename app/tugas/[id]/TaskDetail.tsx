@@ -57,7 +57,7 @@ type OrderData = {
   image_after?: string | string[] | null;
   creator?: { name: string } | null;
   assigned_user?: { name: string } | null;
-  paid_to_user?: { name: string } | null;
+  paid_to_user?: { name: string; role?: number } | null;
   customer?: {
     name: string;
     phone: string;
@@ -121,10 +121,12 @@ export default function TaskDetail() {
   // Current logged-in user
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string>("");
+  const [currentUserRole, setCurrentUserRole] = useState<number | null>(null);
 
   // Status & payment states
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updatingPayment, setUpdatingPayment] = useState(false);
+  const [depositingCash, setDepositingCash] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [notes, setNotes] = useState("");
 
@@ -133,16 +135,19 @@ export default function TaskDetail() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (data?.user) {
         setCurrentUserId(data.user.id);
-        // Fetch the user's display name from users table
+        // Fetch user profile from users table
         const { data: profile } = await (supabase as any)
           .from("users")
-          .select("name")
+          .select("name, role")
           .eq("id", data.user.id)
           .single();
         if (profile?.name) {
           setCurrentUserName(profile.name);
         } else {
           setCurrentUserName(data.user.email?.split("@")[0] || "Teknisi");
+        }
+        if (profile?.role !== undefined) {
+          setCurrentUserRole(profile.role);
         }
       }
     });
@@ -337,6 +342,31 @@ export default function TaskDetail() {
     }
   };
 
+  // Mark cash as deposited to company
+  const handleDepositCash = async () => {
+    if (!id || depositingCash) return;
+    const confirm = window.confirm(
+      "Konfirmasi bahwa uang tunai untuk order ini telah disetor ke kas perusahaan?"
+    );
+    if (!confirm) return;
+
+    try {
+      setDepositingCash(true);
+      await updateOrderStatus({
+        id,
+        paid_to: currentUserId ?? undefined,
+        notes: `Uang tunai disetorkan ke kas perusahaan oleh admin/owner ${currentUserName || ""}`.trim(),
+      });
+      alert("Setoran berhasil dikonfirmasi!");
+      await fetchOrderDetail(id);
+    } catch (err: any) {
+      console.error("Gagal memproses setoran kas:", err);
+      alert(err?.response?.data?.error || "Gagal memproses setoran kas.");
+    } finally {
+      setDepositingCash(false);
+    }
+  };
+
   // Add Item to DB
   const handleAddItem = async () => {
     if (!id || savingItem) return;
@@ -526,7 +556,11 @@ export default function TaskDetail() {
     order.payment_status === "paid" || order.payment_status === "lunas";
 
   // Who holds the cash (paid_to field)
-  const cashHolder = order.paid_to_user?.name || (order.paid_to ? currentUserName || "Teknisi" : null);
+  const isDepositedToCompany =
+    order.paid_to_user?.role === 1 || order.paid_to_user?.role === 2;
+  const cashHolder = isDepositedToCompany
+    ? "Kas Perusahaan / Kantor"
+    : order.paid_to_user?.name || (order.paid_to ? currentUserName || "Teknisi" : null);
   const isCashPayment =
     isPaid &&
     (order.payment_type === "cash" || order.payment_type === "tunai");
@@ -635,35 +669,35 @@ export default function TaskDetail() {
         </section>
 
         {/* Start / Finish work */}
-        <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            disabled={isStarted || updatingStatus}
-            onClick={handleStartWork}
-            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 text-[10px] font-semibold text-white transition hover:bg-blue-700 disabled:bg-emerald-600"
-          >
-            {isStarted ? (
-              <>
-                <Check className="h-3.5 w-3.5" /> Pekerjaan Dimulai
-              </>
-            ) : (
-              <>
+        {!isCompleted && (
+          <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {!isStarted ? (
+              <button
+                type="button"
+                disabled={updatingStatus}
+                onClick={handleStartWork}
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 text-[10px] font-semibold text-white transition hover:bg-blue-700"
+              >
                 <Play className="h-3 w-3 fill-current" /> Mulai Kerja
-              </>
+              </button>
+            ) : (
+              <div className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-700">
+                <Check className="h-3.5 w-3.5" /> Pekerjaan Dimulai
+              </div>
             )}
-          </button>
 
-          {!isCompleted && isStarted && (
-            <button
-              type="button"
-              disabled={updatingStatus}
-              onClick={handleCompleteWork}
-              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 text-[10px] font-semibold text-white transition hover:bg-emerald-700"
-            >
-              <Check className="h-3.5 w-3.5" /> Tandai Selesai
-            </button>
-          )}
-        </section>
+            {isStarted && (
+              <button
+                type="button"
+                disabled={updatingStatus}
+                onClick={handleCompleteWork}
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 text-[10px] font-semibold text-white transition hover:bg-emerald-700"
+              >
+                <Check className="h-3.5 w-3.5" /> Tandai Selesai
+              </button>
+            )}
+          </section>
+        )}
 
         {/* Job details */}
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -991,18 +1025,39 @@ export default function TaskDetail() {
 
           {/* If cash payment is already done with cash holder, show card and remove buttons */}
           {isCashPayment ? (
-            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-center sm:text-left">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
-                  <Check className="h-3 w-3" />
-                </span>
-                <p className="text-[11px] font-bold text-emerald-800">
-                  LUNAS: Uang dipegang {cashHolder || currentUserName || "Teknisi"}
-                </p>
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
+                    <Check className="h-3 w-3" />
+                  </span>
+                  <div>
+                    <p className="text-[11px] font-bold text-emerald-800">
+                      LUNAS: Uang dipegang {cashHolder || currentUserName || "Teknisi"}
+                    </p>
+                    <p className="text-[9px] text-emerald-600">
+                      Pembayaran tunai sebesar {formatRupiah(totalBill)} telah diterima.
+                    </p>
+                  </div>
+                </div>
+
+                {(currentUserRole === 1 || currentUserRole === 2) && !isDepositedToCompany && (
+                  <button
+                    type="button"
+                    disabled={depositingCash}
+                    onClick={handleDepositCash}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-[10px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    {depositingCash ? "Menyimpan..." : "Sudah di Setor"}
+                  </button>
+                )}
+                {isDepositedToCompany && (
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-1 text-[10px] font-medium text-emerald-800">
+                    <Check className="h-3 w-3" /> Sudah disetor ke kantor
+                  </span>
+                )}
               </div>
-              <p className="mt-1 text-[9px] text-emerald-600">
-                Pembayaran tunai sebesar {formatRupiah(totalBill)} telah diterima.
-              </p>
             </div>
           ) : isPaid && (order.payment_type === "transfer" || order.payment_type === "bank") ? (
             <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3">

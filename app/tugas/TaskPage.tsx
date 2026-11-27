@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getOrders, getServices } from "../fetch/get/fetch";
+import { updateOrderStatus } from "../fetch/update/fetch";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
-import { ArrowRight, CornerDownRight, MapPin } from "lucide-react";
+import { ArrowRight, CornerDownRight, MapPin, Banknote, CheckCircle } from "lucide-react";
 
 type TaskItem = {
   id: number | string;
+  assignTo?: string | null;
+  assignedUserIds?: string[];
   dateStr: string;
   isOverdue: boolean;
   status: string;
@@ -19,6 +22,9 @@ type TaskItem = {
   amount: number;
   paymentStatus: string;
   paymentType?: string;
+  paidTo?: string | null;
+  paidToName?: string | null;
+  isDeposited?: boolean;
   dateObj: Date | null;
   rawStatus: string;
 };
@@ -26,7 +32,8 @@ type TaskItem = {
 export default function TaskPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<{ id: string; email?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; email?: string; role?: number } | null>(null);
+  const [submittingDeposit, setSubmittingDeposit] = useState<string | number | null>(null);
   const [todayDateStr, setTodayDateStr] = useState("");
   const [currentDate, setCurrentDate] = useState<Date | null>(null);
 
@@ -45,9 +52,19 @@ export default function TaskPage() {
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       if (data?.user) {
-        setCurrentUser({ id: data.user.id, email: data.user.email });
+        const { data: profile } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+
+        setCurrentUser({
+          id: data.user.id,
+          email: data.user.email,
+          role: profile?.role,
+        });
       }
     });
   }, []);
@@ -216,8 +233,23 @@ export default function TaskPage() {
           });
         }
 
+        const isDeposited =
+          item.paid_to_user?.role === 1 || item.paid_to_user?.role === 2;
+
+        const assignedUserIds: string[] = [];
+        if (item.assign_to) assignedUserIds.push(String(item.assign_to));
+        if (Array.isArray(item.order_assignments)) {
+          item.order_assignments.forEach((oa: any) => {
+            if (oa.assigned_to && !assignedUserIds.includes(String(oa.assigned_to))) {
+              assignedUserIds.push(String(oa.assigned_to));
+            }
+          });
+        }
+
         return {
           id: item.id,
+          assignTo: item.assign_to,
+          assignedUserIds,
           dateStr: formattedDate,
           isOverdue,
           status: displayStatus,
@@ -229,6 +261,11 @@ export default function TaskPage() {
           amount: total,
           paymentStatus: (item.payment_status || "unpaid").toString().toLowerCase(),
           paymentType: (item.payment_type || "").toString().toLowerCase(),
+          paidTo: item.paid_to,
+          paidToName: isDeposited
+            ? "Kas Kantor"
+            : item.paid_to_user?.name || (item.paid_to ? "Kasir/Kantor" : null),
+          isDeposited,
           dateObj,
           rawStatus,
         };
@@ -242,6 +279,56 @@ export default function TaskPage() {
     }
   };
 
+  const handleMarkDeposited = async (
+    e: React.MouseEvent,
+    taskId: string | number
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!currentUser?.id) {
+      alert("Silakan login terlebih dahulu.");
+      return;
+    }
+
+    const confirm = window.confirm(
+      "Konfirmasi bahwa uang tunai untuk order ini telah disetor ke kas perusahaan?"
+    );
+    if (!confirm) return;
+
+    try {
+      setSubmittingDeposit(taskId);
+      // Mark paid_to as the receiving admin/company account
+      await updateOrderStatus({
+        id: String(taskId),
+        paid_to: currentUser.id,
+        notes: "Uang tunai telah disetorkan ke kas perusahaan",
+      });
+
+      alert("Setoran berhasil dikonfirmasi!");
+      await fetchTasks();
+    } catch (err: any) {
+      console.error("Gagal mengubah status setoran:", err);
+      alert(err?.response?.data?.error || "Gagal mengonfirmasi setoran.");
+    } finally {
+      setSubmittingDeposit(null);
+    }
+  };
+
+  // Filter tasks based on user role: Role 3 (Karyawan) and Role 4 (Mitra) only see tasks assigned to them
+  const accessibleTasks = useMemo(() => {
+    if (!currentUser) return tasks;
+    if (currentUser.role === 3 || currentUser.role === 4) {
+      return tasks.filter((t) => {
+        const isDirectAssign = t.assignTo && String(t.assignTo) === currentUser.id;
+        const isAssignment = t.assignedUserIds && t.assignedUserIds.includes(currentUser.id);
+        const isHolder = t.paidTo && String(t.paidTo) === currentUser.id;
+        return isDirectAssign || isAssignment || isHolder;
+      });
+    }
+    return tasks;
+  }, [tasks, currentUser]);
+
   // Split tasks into sections
   const { todayAndPending, upcoming, recentlyCompleted } = useMemo(() => {
     const today = currentDate ? new Date(currentDate) : new Date(0);
@@ -251,7 +338,7 @@ export default function TaskPage() {
     const upcomingList: TaskItem[] = [];
     const completedList: TaskItem[] = [];
 
-    tasks.forEach((t) => {
+    accessibleTasks.forEach((t) => {
       const isCompleted =
         t.rawStatus === "completed" || t.rawStatus === "selesai";
       const isCancelled =
@@ -302,7 +389,7 @@ export default function TaskPage() {
       upcoming: upcomingList,
       recentlyCompleted: completedList,
     };
-  }, [tasks, currentDate]);
+  }, [accessibleTasks, currentDate]);
 
   // Summaries calculation
   const { monthlyCommission, unpaidAmount, cashHeld } = useMemo(() => {
@@ -313,7 +400,7 @@ export default function TaskPage() {
     let unpaid = 0;
     let cash = 0;
 
-    tasks.forEach((t) => {
+    accessibleTasks.forEach((t) => {
       const isCompleted =
         t.rawStatus === "completed" || t.rawStatus === "selesai";
       const isCancelled =
@@ -330,12 +417,21 @@ export default function TaskPage() {
         unpaid += t.amount;
       }
 
-      // 2. Cash held: paid by cash
-      if (isPaid && (t.paymentType === "cash" || t.paymentType === "tunai")) {
-        cash += t.amount;
+      // 2. Cash held: paid by cash, not yet deposited to company
+      const isCash = t.paymentType === "cash" || t.paymentType === "tunai";
+      if (isPaid && isCash && !t.isDeposited) {
+        // If employee / partner (role 3 or 4), only count if held by this user
+        if (currentUser?.role === 3 || currentUser?.role === 4) {
+          if (t.paidTo && String(t.paidTo) === currentUser.id) {
+            cash += t.amount;
+          }
+        } else {
+          // Admin/Owner sees all undeposited cash held by technicians
+          cash += t.amount;
+        }
       }
 
-      // 3. Commission this month: completed orders in current month
+      // 3. Omset this month: completed orders in current month
       if (isCompleted && t.dateObj && !isNaN(t.dateObj.getTime())) {
         if (
           t.dateObj.getMonth() === currentMonth &&
@@ -351,7 +447,7 @@ export default function TaskPage() {
       unpaidAmount: unpaid,
       cashHeld: cash,
     };
-  }, [tasks, currentDate]);
+  }, [accessibleTasks, currentDate, currentUser]);
 
   const formatRupiah = (amount: number) =>
     `Rp ${amount.toLocaleString("id-ID")}`;
@@ -373,12 +469,21 @@ export default function TaskPage() {
         </header>
 
         {/* Summary cards */}
-        <section className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <SummaryCard
-            label="OMSET SELESAI BLN INI"
-            amount={formatRupiah(monthlyCommission)}
-            amountColor="text-emerald-700"
-          />
+        <section
+          className={`mb-4 grid grid-cols-1 gap-2 ${
+            currentUser?.role === 3 || currentUser?.role === 4
+              ? "sm:grid-cols-2"
+              : "sm:grid-cols-3"
+          }`}
+        >
+          {/* Omset bulan ini: Only visible to Owner (1) and Admin (2) */}
+          {currentUser?.role !== 3 && currentUser?.role !== 4 && (
+            <SummaryCard
+              label="OMSET SELESAI BLN INI"
+              amount={formatRupiah(monthlyCommission)}
+              amountColor="text-emerald-700"
+            />
+          )}
 
           <SummaryCard
             label="BELUM DIBAYAR"
@@ -456,6 +561,39 @@ export default function TaskPage() {
                             {task.address}
                           </p>
                         )}
+
+                        {/* Cash payment tracking for Admin (Role 1 or 2) */}
+                        {task.paymentType === "cash" && (
+                          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[10px]">
+                            <div className="flex items-center gap-1.5 text-slate-600">
+                              <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>
+                                Uang Tunai dipegang:{" "}
+                                <strong className="text-slate-800">
+                                  {task.paidToName || task.technician}
+                                </strong>
+                              </span>
+                            </div>
+
+                            {(currentUser?.role === 1 || currentUser?.role === 2) && !task.isDeposited && (
+                              <button
+                                onClick={(e) => handleMarkDeposited(e, task.id)}
+                                disabled={submittingDeposit === task.id}
+                                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                              >
+                                <CheckCircle className="h-3 w-3" />
+                                {submittingDeposit === task.id
+                                  ? "Menyimpan..."
+                                  : "Sudah di Setor"}
+                              </button>
+                            )}
+                            {task.isDeposited && (
+                              <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-800">
+                                <CheckCircle className="h-3 w-3" /> Sudah disetor
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </article>
                     </Link>
                   ))}
@@ -491,6 +629,39 @@ export default function TaskPage() {
                           {task.technician}
                           {task.customerName ? ` · ${task.customerName}` : ""}
                         </p>
+
+                        {/* Cash payment tracking for Admin (Role 1 or 2) */}
+                        {task.paymentType === "cash" && (
+                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[10px]">
+                            <div className="flex items-center gap-1.5 text-slate-600">
+                              <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>
+                                Uang Tunai dipegang:{" "}
+                                <strong className="text-slate-800">
+                                  {task.paidToName || task.technician}
+                                </strong>
+                              </span>
+                            </div>
+
+                            {(currentUser?.role === 1 || currentUser?.role === 2) && !task.isDeposited && (
+                              <button
+                                onClick={(e) => handleMarkDeposited(e, task.id)}
+                                disabled={submittingDeposit === task.id}
+                                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                              >
+                                <CheckCircle className="h-3 w-3" />
+                                {submittingDeposit === task.id
+                                  ? "Menyimpan..."
+                                  : "Sudah di Setor"}
+                              </button>
+                            )}
+                            {task.isDeposited && (
+                              <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-800">
+                                <CheckCircle className="h-3 w-3" /> Sudah disetor
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </article>
                     </Link>
                   ))}
@@ -539,6 +710,11 @@ export default function TaskPage() {
                           <span className="text-[9px] text-slate-400">
                             {task.dateStr}
                           </span>
+                          {task.paymentType === "cash" && (
+                            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 border border-amber-200">
+                              💵 {task.paidToName || task.technician}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </Link>

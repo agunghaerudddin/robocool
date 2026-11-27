@@ -26,7 +26,7 @@ export async function GET(
         image_after,
         creator:users!orders_user_id_fkey(name),
         assigned_user:users!orders_assign_to_fkey(name),
-        paid_to_user:users!orders_paid_to_fkey(name),
+        paid_to_user:users!orders_paid_to_fkey(name, role),
         customer:customers!orders_customer_id_fkey(name, phone, google_maps, label),
         service_orders(*, service:services(name, warranty, estimate)),
         sparepart_orders(*),

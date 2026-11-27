@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     const customer_id = customer?.customer_id;
 
     // Ambil properti dari objek order
-    const { commission_mode, status, payment_type, payment_status, assign_to } =
+    const { commission_mode, status, payment_type, payment_status, assign_to, paid_to } =
       order ?? {};
 
     // Validasi data wajib
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
         payment_type: payment_type ?? null,
         payment_status: payment_status ?? "unpaid",
         assign_to: assign_to ?? null,
+        paid_to: paid_to ?? null,
       })
       .select()
       .single();

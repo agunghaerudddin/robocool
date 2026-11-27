@@ -16,7 +16,7 @@ export async function GET() {
 
       creator:users!orders_user_id_fkey(name),
       assigned_user:users!orders_assign_to_fkey(name),
-      paid_to_user:users!orders_paid_to_fkey(name),
+      paid_to_user:users!orders_paid_to_fkey(name, role),
 
       customer_id,
       customer:customers!orders_customer_id_fkey(name, phone, google_maps, label),
@@ -28,7 +28,8 @@ export async function GET() {
       sparepart_orders(*),
       other_costs_orders(*),
       product_orders(*),
-      complaint_schedules(*)
+      complaint_schedules(*),
+      order_assignments(*)
     `);
 
   if (error) {

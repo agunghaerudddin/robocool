@@ -132,6 +132,8 @@ export default function CreateOrderPage() {
 
   // Order Settings (Defaults)
   const [discount, setDiscount] = useState(0);
+  const [paymentType, setPaymentType] = useState<string>("unpaid");
+  const [cashHolderId, setCashHolderId] = useState<string>("");
 
   // Services, Spareparts, Other Costs, Products
   const [services, setServices] = useState<ServiceItem[]>([
@@ -402,9 +404,14 @@ export default function CreateOrderPage() {
         finalCustomerId = customerRes.data.customer.id;
       }
 
-      // 2. Create Order with fixed defaults: pending, payment_type null, payment_status unpaid
+      // 2. Create Order
       const primaryAssignee =
         selectedTechnicians.length > 0 ? selectedTechnicians[0] : null;
+
+      const isCash = paymentType === "cash";
+      const finalPaidTo = isCash ? (cashHolderId || primaryAssignee || userId) : null;
+      const finalPaymentStatus = isCash ? "paid" : "unpaid";
+      const finalPaymentType = isCash ? "cash" : (paymentType === "transfer" ? "transfer" : null);
 
       const orderRes = await createOrder({
         user_id: userId,
@@ -412,9 +419,10 @@ export default function CreateOrderPage() {
         order: {
           commission_mode: "percentage",
           status: "pending",
-          payment_type: null,
-          payment_status: "unpaid",
+          payment_type: finalPaymentType,
+          payment_status: finalPaymentStatus,
           assign_to: primaryAssignee,
+          paid_to: finalPaidTo,
         },
       });
 
@@ -1678,6 +1686,57 @@ export default function CreateOrderPage() {
                     {money(total)}
                   </span>
                 </div>
+              </div>
+
+              {/* PEMBAYARAN */}
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <Field label="Metode Pembayaran">
+                  <select
+                    className={inputClass}
+                    value={paymentType}
+                    onChange={(e) => {
+                      setPaymentType(e.target.value);
+                      if (e.target.value === "cash" && !cashHolderId) {
+                        setCashHolderId(selectedTechnicians[0] || userId || "");
+                      }
+                    }}
+                  >
+                    <option value="unpaid">Belum Dibayar (Tagihan)</option>
+                    <option value="cash">Tunai (Cash)</option>
+                    <option value="transfer">Transfer Bank</option>
+                  </select>
+                </Field>
+
+                {paymentType === "cash" && (
+                  <div className="mt-2.5 rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5">
+                    <Field label="Uang Dipegang Oleh">
+                      <select
+                        className={`${inputClass} border-emerald-200 bg-white`}
+                        value={cashHolderId || selectedTechnicians[0] || userId || ""}
+                        onChange={(e) => setCashHolderId(e.target.value)}
+                      >
+                        {technicians.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} (
+                            {t.role === 1
+                              ? "Owner"
+                              : t.role === 2
+                                ? "Admin"
+                                : t.role === 3
+                                  ? "Karyawan"
+                                  : t.role === 4
+                                    ? "Mitra"
+                                    : "Staff"}
+                            )
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <p className="mt-1 text-[10px] text-emerald-800">
+                      Uang tunai akan tercatat dipegang oleh user ini sampai disetor ke kas kantor.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <button
