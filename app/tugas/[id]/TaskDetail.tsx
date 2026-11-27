@@ -284,6 +284,19 @@ export default function TaskDetail() {
   // Status handlers
   const handleStartWork = async () => {
     if (!id || updatingStatus) return;
+
+    // Must have at least 1 "foto sebelum" uploaded before starting
+    const currentBeforePhotos: string[] = Array.isArray(order?.image_before)
+      ? order.image_before
+      : order?.image_before
+      ? [order.image_before]
+      : [];
+
+    if (currentBeforePhotos.length === 0) {
+      alert("Wajib mengunggah minimal 1 Foto Sebelum Pengerjaan sebelum memulai pekerjaan.");
+      return;
+    }
+
     try {
       setUpdatingStatus(true);
       await updateOrderStatus({
@@ -302,6 +315,19 @@ export default function TaskDetail() {
 
   const handleCompleteWork = async () => {
     if (!id || updatingStatus) return;
+
+    // Must have at least 1 "foto sesudah" uploaded before completing
+    const currentAfterPhotos: string[] = Array.isArray(order?.image_after)
+      ? order.image_after
+      : order?.image_after
+      ? [order.image_after]
+      : [];
+
+    if (currentAfterPhotos.length === 0) {
+      alert("Wajib mengunggah minimal 1 Foto Sesudah Pengerjaan sebelum menyelesaikan pekerjaan.");
+      return;
+    }
+
     try {
       setUpdatingStatus(true);
       await updateOrderStatus({
@@ -670,31 +696,45 @@ export default function TaskDetail() {
 
         {/* Start / Finish work */}
         {!isCompleted && (
-          <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {!isStarted ? (
-              <button
-                type="button"
-                disabled={updatingStatus}
-                onClick={handleStartWork}
-                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 text-[10px] font-semibold text-white transition hover:bg-blue-700"
-              >
-                <Play className="h-3 w-3 fill-current" /> Mulai Kerja
-              </button>
-            ) : (
-              <div className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-700">
-                <Check className="h-3.5 w-3.5" /> Pekerjaan Dimulai
-              </div>
-            )}
+          <section className="space-y-1.5">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {!isStarted ? (
+                <button
+                  type="button"
+                  disabled={updatingStatus || beforePhotos.length === 0}
+                  onClick={handleStartWork}
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 text-[10px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                >
+                  <Play className="h-3 w-3 fill-current" /> Mulai Kerja
+                </button>
+              ) : (
+                <div className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-700">
+                  <Check className="h-3.5 w-3.5" /> Pekerjaan Dimulai
+                </div>
+              )}
 
-            {isStarted && (
-              <button
-                type="button"
-                disabled={updatingStatus}
-                onClick={handleCompleteWork}
-                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 text-[10px] font-semibold text-white transition hover:bg-emerald-700"
-              >
-                <Check className="h-3.5 w-3.5" /> Tandai Selesai
-              </button>
+              {isStarted && (
+                <button
+                  type="button"
+                  disabled={updatingStatus || afterPhotos.length === 0}
+                  onClick={handleCompleteWork}
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 text-[10px] font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                >
+                  <Check className="h-3.5 w-3.5" /> Tandai Selesai
+                </button>
+              )}
+            </div>
+
+            {/* Validation helper text */}
+            {!isStarted && beforePhotos.length === 0 && (
+              <p className="text-[9px] text-amber-600 font-medium">
+                * Wajib mengunggah &quot;Foto Sebelum&quot; terlebih dahulu untuk mulai kerja.
+              </p>
+            )}
+            {isStarted && afterPhotos.length === 0 && (
+              <p className="text-[9px] text-amber-600 font-medium">
+                * Wajib mengunggah &quot;Foto Sesudah&quot; terlebih dahulu untuk menyelesaikan pekerjaan.
+              </p>
             )}
           </section>
         )}
