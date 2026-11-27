@@ -60,6 +60,17 @@ const formatTimeOnly = (isoStr: string | null | undefined) => {
   });
 };
 
+// Map DB status to friendly UI display
+const mapDisplayStatus = (rawStatus: string | null | undefined): string => {
+  const s = (rawStatus || "").toLowerCase();
+  if (s === "present" || s === "hadir" || s === "on_time") return "Hadir";
+  if (s === "late" || s === "terlambat") return "Terlambat";
+  if (s === "absent" || s === "alfa" || s === "alpha") return "Alpa";
+  if (s === "permission" || s === "izin") return "Izin";
+  if (s === "sick" || s === "sakit") return "Sakit";
+  return rawStatus || "Hadir";
+};
+
 export default function AttendancePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -77,8 +88,10 @@ export default function AttendancePage() {
     longitude: number;
     accuracy: number;
   } | null>(null);
+  const [addressName, setAddressName] = useState<string>("");
   const [locationStatus, setLocationStatus] = useState<string>("Mendeteksi lokasi...");
   const [detectingGps, setDetectingGps] = useState(false);
+  const watchIdRef = useRef<number | null>(null);
 
   // Server Time Synchronization
   // serverOffsetMs = serverTimestamp - localDeviceTimestamp
@@ -138,7 +151,69 @@ export default function AttendancePage() {
     };
   }, []);
 
-  // Request GPS Location
+  // Fetch address name using free OpenStreetMap Nominatim reverse geocoding
+  const fetchAddressName = async (lat: number, lng: number) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.display_name) {
+          setAddressName(data.display_name);
+        }
+      }
+    } catch (err) {
+      console.warn("Reverse geocode warning:", err);
+    }
+  };
+
+  // Start real-time GPS watch
+  const startGpsWatch = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("GPS tidak didukung oleh browser Anda.");
+      return;
+    }
+
+    setDetectingGps(true);
+
+    // Clear existing watch if any
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const loc = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: Math.round(pos.coords.accuracy),
+        };
+        setCurrentLocation(loc);
+        setLocationStatus("Lokasi realtime terhubung");
+        setDetectingGps(false);
+        fetchAddressName(loc.latitude, loc.longitude);
+      },
+      (err) => {
+        console.warn("Geolocation watch error:", err.message);
+        if (err.code === 1) {
+          setLocationStatus("Izin akses lokasi ditolak. Harap izinkan akses lokasi pada browser/HP Anda.");
+        } else if (err.code === 2) {
+          setLocationStatus("Lokasi tidak tersedia atau sinyal GPS lemah.");
+        } else {
+          setLocationStatus("Batas waktu deteksi lokasi habis. Silakan coba lagi.");
+        }
+        setDetectingGps(false);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 15000,
+      }
+    );
+  };
+
+  // One-time prompt / refresh GPS
   const requestLocation = (): Promise<{
     latitude: number;
     longitude: number;
@@ -147,7 +222,7 @@ export default function AttendancePage() {
     setDetectingGps(true);
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
-        setLocationStatus("GPS tidak didukung oleh browser");
+        setLocationStatus("GPS tidak didukung oleh browser Anda.");
         setDetectingGps(false);
         resolve(null);
         return;
@@ -161,17 +236,22 @@ export default function AttendancePage() {
             accuracy: Math.round(pos.coords.accuracy),
           };
           setCurrentLocation(loc);
-          setLocationStatus("Lokasi berhasil dideteksi");
+          setLocationStatus("Lokasi realtime terhubung");
           setDetectingGps(false);
+          fetchAddressName(loc.latitude, loc.longitude);
           resolve(loc);
         },
         (err) => {
-          console.warn("Geolocation warning:", err.message);
-          setLocationStatus("Izin GPS tidak diberikan atau sinyal lemah");
+          console.warn("Geolocation error:", err.message);
+          setLocationStatus(
+            err.code === 1
+              ? "Izin akses lokasi ditolak. Harap izinkan akses lokasi di browser/HP."
+              : "Gagal mendeteksi lokasi GPS perangkat."
+          );
           setDetectingGps(false);
           resolve(null);
         },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     });
   };
@@ -218,7 +298,13 @@ export default function AttendancePage() {
       }
     });
 
-    requestLocation();
+    startGpsWatch();
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
   }, []);
 
   const checkedIn = Boolean(todayRecord?.check_in_at);
@@ -316,7 +402,7 @@ export default function AttendancePage() {
               {checkedOut
                 ? "Selesai"
                 : checkedIn
-                  ? `Sudah Check In (${todayRecord?.status || "Hadir"})`
+                  ? `Sudah Check In (${mapDisplayStatus(todayRecord?.status)})`
                   : "Belum Absen"}
             </h2>
             <p className="mt-1 text-[9px] text-slate-500">
@@ -613,14 +699,14 @@ export default function AttendancePage() {
 
                     <span
                       className={`rounded-full px-2 py-1 text-[9px] font-medium ${
-                        item.status === "Hadir"
+                        mapDisplayStatus(item.status) === "Hadir"
                           ? "bg-emerald-50 text-emerald-700"
-                          : item.status === "Terlambat"
+                          : mapDisplayStatus(item.status) === "Terlambat"
                             ? "bg-amber-50 text-amber-700"
                             : "bg-slate-100 text-slate-600"
                       }`}
                     >
-                      {item.status || "Hadir"}
+                      {mapDisplayStatus(item.status)}
                     </span>
                   </div>
                 </div>

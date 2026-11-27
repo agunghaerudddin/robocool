@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     // 2. Check if an attendance record already exists for this user and server date
     const { data: existing } = await supabase
       .from("attendance")
-      .select("id, check_in_at, check_out_at")
+      .select("id, check_in_at, check_out_at, status")
       .eq("user_id", user_id)
       .eq("attendance_date", serverDate)
       .maybeSingle();
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Compute status based on server time (e.g. 08:15 in configured timezone)
+    // 3. Determine if attendance is late (after 08:15)
     const tzFormatter = new Intl.DateTimeFormat("en-US", {
       timeZone: APP_TIMEZONE,
       hour: "numeric",
@@ -62,39 +62,59 @@ export async function POST(req: NextRequest) {
     const parts = tzFormatter.formatToParts(serverNow);
     const hourPart = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10);
     const minutePart = parseInt(parts.find((p) => p.type === "minute")?.value || "0", 10);
+    const isLate = hourPart > 8 || (hourPart === 8 && minutePart > 15);
 
-    let calculatedStatus = status || "Hadir";
-    if (!status) {
-      if (hourPart > 8 || (hourPart === 8 && minutePart > 15)) {
-        calculatedStatus = "Terlambat";
+    // Candidates of status to satisfy table check constraint:
+    // Some schemas enforce lowercase English ("present" / "late"), lowercase Indonesian ("hadir" / "terlambat"),
+    // or capitalized words.
+    const statusCandidates = status
+      ? [status]
+      : isLate
+        ? ["late", "terlambat", "Terlambat", "Late", "present", "hadir", "Hadir"]
+        : ["present", "hadir", "Hadir", "Present", "on_time"];
+
+    let lastError: any = null;
+    let savedData: any = null;
+
+    for (const cand of statusCandidates) {
+      const insertPayload: Record<string, any> = {
+        user_id,
+        attendance_date: serverDate,
+        check_in_at: serverIso,
+        check_in_latitude: check_in_latitude !== undefined ? check_in_latitude : null,
+        check_in_longitude: check_in_longitude !== undefined ? check_in_longitude : null,
+        check_in_accuracy: check_in_accuracy !== undefined ? check_in_accuracy : null,
+        status: cand,
+        created_at: serverIso,
+        updated_at: serverIso,
+      };
+
+      const { data, error } = await supabase
+        .from("attendance")
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (!error && data) {
+        savedData = data;
+        lastError = null;
+        break;
+      } else {
+        lastError = error;
+        // If the error is NOT a check constraint error, no need to keep trying statuses
+        if (error?.code !== "23514") {
+          break;
+        }
       }
     }
 
-    const insertPayload: Record<string, any> = {
-      user_id,
-      attendance_date: serverDate,
-      check_in_at: serverIso,
-      check_in_latitude: check_in_latitude !== undefined ? check_in_latitude : null,
-      check_in_longitude: check_in_longitude !== undefined ? check_in_longitude : null,
-      check_in_accuracy: check_in_accuracy !== undefined ? check_in_accuracy : null,
-      status: calculatedStatus,
-      created_at: serverIso,
-      updated_at: serverIso,
-    };
-
-    const { data, error } = await supabase
-      .from("attendance")
-      .insert(insertPayload)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Failed to record attendance check-in:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!savedData && lastError) {
+      console.error("Failed to record attendance check-in:", lastError);
+      return NextResponse.json({ error: lastError.message, details: lastError }, { status: 500 });
     }
 
     return NextResponse.json(
-      { message: "Check-in berhasil dicatat.", data },
+      { message: "Check-in berhasil dicatat.", data: savedData },
       { status: 201 }
     );
   } catch (err: any) {
