@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 export async function PATCH(req: Request) {
   try {
     const body = await req.json();
-    const { id, status, notes, payment_status, payment_type, paid_to } = body;
+    const { id, status, notes, payment_status, payment_type, paid_to, assign_to } = body;
 
-    if (!id || (!status && !payment_status && !payment_type && !paid_to)) {
+    if (!id || (!status && !payment_status && !payment_type && paid_to === undefined && assign_to === undefined)) {
       return NextResponse.json(
         { error: "id and at least one field to update are required." },
         { status: 400 }
@@ -20,6 +20,7 @@ export async function PATCH(req: Request) {
     if (payment_status) updateFields.payment_status = payment_status;
     if (payment_type) updateFields.payment_type = payment_type;
     if (paid_to !== undefined) updateFields.paid_to = paid_to;
+    if (assign_to !== undefined) updateFields.assign_to = assign_to;
 
     // 1. Update fields on orders table
     const { data: updatedOrder, error: updateError } = await supabase
@@ -68,8 +69,8 @@ export async function PATCH(req: Request) {
       ];
 
       for (const payload of historyPayloadVariants) {
-        const { error: histErr } = await supabase
-          .from("order_history")
+        const { error: histErr } = await (supabase
+          .from("order_history") as any)
           .insert(payload);
         if (!histErr) {
           break;

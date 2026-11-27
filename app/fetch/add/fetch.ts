@@ -182,4 +182,18 @@ export const createCommission = async (data: CommissionPayload) => {
   return await axios.post("/api/create/create-commission", data);
 };
 
+export type CreateAttendancePayload = {
+  user_id: string;
+  attendance_date: string;
+  check_in_at?: string;
+  check_in_latitude?: number | null;
+  check_in_longitude?: number | null;
+  check_in_accuracy?: number | null;
+  status?: string;
+};
+
+export const createAttendance = async (data: CreateAttendancePayload) => {
+  return await axios.post("/api/create/create-attendance", data);
+};
+
 

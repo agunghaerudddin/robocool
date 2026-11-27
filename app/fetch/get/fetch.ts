@@ -107,5 +107,33 @@ export const getCommissions = async (params?: {
   }
 };
 
+export const getAttendance = async (params?: {
+  user_id?: string;
+  date?: string;
+  limit?: number;
+}) => {
+  try {
+    const res = await axios.get("/api/get/get-attendance", { params });
+    return res;
+  } catch (error) {
+    console.error("Failed to fetch attendance", error);
+  }
+};
+
+export const getServerTime = async () => {
+  try {
+    const res = await axios.get<{
+      iso: string;
+      timestamp: number;
+      date: string;
+      time: string;
+      formattedDate: string;
+    }>("/api/get/get-server-time");
+    return res;
+  } catch (error) {
+    console.error("Failed to fetch server time", error);
+  }
+};
+
 
 

@@ -7,6 +7,7 @@ export type UpdateOrderStatusPayload = {
   payment_status?: string;
   payment_type?: string;
   paid_to?: string | null;
+  assign_to?: string | null;
 };
 
 export const updateOrderStatus = async (data: UpdateOrderStatusPayload) => {
@@ -53,5 +54,20 @@ export const deleteOffer = async (id: string | number) => {
 
 export const updateOrderCommissions = async (orderId: string | number) => {
   return await axios.post("/api/update/update-order-commissions", { order_id: orderId });
+};
+
+export type UpdateAttendancePayload = {
+  id?: string;
+  user_id?: string;
+  attendance_date?: string;
+  check_out_at?: string;
+  check_out_latitude?: number | null;
+  check_out_longitude?: number | null;
+  check_out_accuracy?: number | null;
+  status?: string;
+};
+
+export const updateAttendance = async (data: UpdateAttendancePayload) => {
+  return await axios.patch("/api/update/update-attendance", data);
 };
 

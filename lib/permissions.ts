@@ -27,6 +27,7 @@ export const ROLE_ACCESSIBLE_PAGES: Record<number, string[]> = {
     "/keuangan",
     "/buat-akun",
     "/komisi",
+    "/absen",
   ],
 
   // Role 2: Admin (Operasional & Manajemen)
@@ -39,10 +40,11 @@ export const ROLE_ACCESSIBLE_PAGES: Record<number, string[]> = {
     "/keuangan",
     "/buat-akun",
     "/komisi",
+    "/absen",
   ],
 
   // Role 3: Karyawan (Operasional Lapangan & Order)
-  [USER_ROLES.KARYAWAN]: ["/dashboard", "/tugas", "/order"],
+  [USER_ROLES.KARYAWAN]: ["/tugas", "/order", "/absen"],
 
   // Role 4: Mitra (Khusus Tugas Lapangan & Komisi)
   [USER_ROLES.MITRA]: ["/tugas", "/komisi"],
@@ -54,7 +56,7 @@ export const ROLE_ACCESSIBLE_PAGES: Record<number, string[]> = {
 export const ROLE_DEFAULT_PAGES: Record<number, string> = {
   [USER_ROLES.OWNER]: "/dashboard",
   [USER_ROLES.ADMIN]: "/dashboard",
-  [USER_ROLES.KARYAWAN]: "/dashboard",
+  [USER_ROLES.KARYAWAN]: "/tugas",
   [USER_ROLES.MITRA]: "/tugas",
 };
 
