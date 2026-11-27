@@ -20,6 +20,7 @@ import {
   createProductOrder,
   createComplaintSchedule,
   createAssignment,
+  createCommission,
 } from "@/app/fetch/add/fetch";
 
 export type CustomerOption = {
@@ -130,8 +131,6 @@ export default function CreateOrderPage() {
   const [newUnitId, setNewUnitId] = useState<number | null>(null);
 
   // Order Settings (Defaults)
-  const [commissionMode, setCommissionMode] = useState("percentage");
-  const [commission, setCommission] = useState(0);
   const [discount, setDiscount] = useState(0);
 
   // Services, Spareparts, Other Costs, Products
@@ -160,6 +159,8 @@ export default function CreateOrderPage() {
 
   // Assign Technician
   const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]);
+  // Mitra Commission Percentages (technicianId -> percentage, default 30)
+  const [mitraCommissions, setMitraCommissions] = useState<Record<string, number>>({});
 
   // UI state
   const [submitting, setSubmitting] = useState(false);
@@ -188,11 +189,6 @@ export default function CreateOrderPage() {
   const subtotal =
     serviceTotal + sparepartTotal + otherCostTotal + productTotal;
   const total = Math.max(0, subtotal - Number(discount || 0));
-
-  const commissionAmount =
-    commissionMode === "percentage"
-      ? (total * Number(commission || 0)) / 100
-      : Number(commission || 0);
 
   // Helper updaters
   const updateService = (
@@ -414,7 +410,7 @@ export default function CreateOrderPage() {
         user_id: userId,
         customer: { customer_id: finalCustomerId },
         order: {
-          commission_mode: commissionMode,
+          commission_mode: "percentage",
           status: "pending",
           payment_type: null,
           payment_status: "unpaid",
@@ -525,6 +521,23 @@ export default function CreateOrderPage() {
           assigned_to: techId,
           status: "assigned",
         });
+
+        // 9. Assign commission if the technician is a Mitra (Role 4)
+        const techObj = technicians.find((t) => t.id === techId);
+        if (techObj && techObj.role === 4) {
+          const rate = mitraCommissions[techId] !== undefined ? mitraCommissions[techId] : 30;
+          const calculatedCommission = Math.round((total * rate) / 100);
+
+          await createCommission({
+            user_id: techId,
+            order_id: orderId,
+            base_amount: total,
+            rate_applied: rate,
+            commission_amount: calculatedCommission,
+            status: "unpaid",
+            notes: `Komisi Pelaksana Order ${createdOrder.id}`,
+          });
+        }
       }
 
       alert("Order berhasil dibuat!");
@@ -1519,44 +1532,104 @@ export default function CreateOrderPage() {
                     Tidak ada data teknisi
                   </p>
                 ) : (
-                  technicians.map((tech) => (
-                    <div
-                      key={tech.id}
-                      className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
-                    >
-                      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={selectedTechnicians.includes(tech.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedTechnicians((prev) => [
-                                ...prev,
-                                tech.id,
-                              ]);
-                            } else {
-                              setSelectedTechnicians((prev) =>
-                                prev.filter((id) => id !== tech.id),
-                              );
-                            }
-                          }}
-                          className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
-                        />
-                        <span>{tech.name}</span>
-                      </label>
-                      <span className="text-xs text-slate-500">
-                        {tech.role === 1
-                          ? "Owner"
-                          : tech.role === 2
-                            ? "Admin"
-                            : tech.role === 3
-                              ? "Karyawan"
-                              : tech.role === 4
-                                ? "Mitra"
-                                : "Staff"}
-                      </span>
-                    </div>
-                  ))
+                  technicians.map((tech) => {
+                    const isChecked = selectedTechnicians.includes(tech.id);
+                    const isMitra = tech.role === 4;
+                    const commissionRate =
+                      mitraCommissions[tech.id] !== undefined
+                        ? mitraCommissions[tech.id]
+                        : 30;
+
+                    return (
+                      <div
+                        key={tech.id}
+                        className="rounded-lg border border-slate-200 bg-white p-2.5 transition"
+                      >
+                        <div className="flex items-center justify-between">
+                          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedTechnicians((prev) => [
+                                    ...prev,
+                                    tech.id,
+                                  ]);
+                                  // initialize default 30% if mitra
+                                  if (isMitra && mitraCommissions[tech.id] === undefined) {
+                                    setMitraCommissions((prev) => ({
+                                      ...prev,
+                                      [tech.id]: 30,
+                                    }));
+                                  }
+                                } else {
+                                  setSelectedTechnicians((prev) =>
+                                    prev.filter((id) => id !== tech.id),
+                                  );
+                                }
+                              }}
+                              className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
+                            />
+                            <span className="font-medium">{tech.name}</span>
+                          </label>
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              isMitra
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "text-slate-500"
+                            }`}
+                          >
+                            {tech.role === 1
+                              ? "Owner"
+                              : tech.role === 2
+                                ? "Admin"
+                                : tech.role === 3
+                                  ? "Karyawan"
+                                  : tech.role === 4
+                                    ? "Mitra"
+                                    : "Staff"}
+                          </span>
+                        </div>
+
+                        {/* If checked AND has role Mitra (4), show editable commission field */}
+                        {isChecked && isMitra && (
+                          <div className="mt-2.5 rounded border border-amber-100 bg-amber-50/50 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-[11px] font-medium text-amber-900">
+                                Komisi Mitra:
+                              </label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={commissionRate}
+                                  onChange={(e) => {
+                                    const val = Math.max(0, Number(e.target.value));
+                                    setMitraCommissions((prev) => ({
+                                      ...prev,
+                                      [tech.id]: val,
+                                    }));
+                                  }}
+                                  className="w-16 rounded border border-amber-300 bg-white px-2 py-1 text-right text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                                <span className="text-xs font-semibold text-amber-800">
+                                  %
+                                </span>
+                              </div>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between text-[10px] text-amber-800">
+                              <span>Estimasi komisi:</span>
+                              <span className="font-semibold text-slate-800">
+                                {money(Math.round((total * commissionRate) / 100))}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </Section>
@@ -1604,42 +1677,6 @@ export default function CreateOrderPage() {
                   <span className="text-lg font-bold text-blue-700">
                     {money(total)}
                   </span>
-                </div>
-              </div>
-
-              <div className="mt-5 border-t border-slate-100 pt-4">
-                <Field label="Mode komisi">
-                  <select
-                    className={inputClass}
-                    value={commissionMode}
-                    onChange={(e) => setCommissionMode(e.target.value)}
-                  >
-                    <option value="percentage">Persentase (%)</option>
-                    <option value="fixed">Nominal tetap (Rp)</option>
-                  </select>
-                </Field>
-                <div className="mt-3">
-                  <Field
-                    label={
-                      commissionMode === "percentage"
-                        ? "Komisi (%)"
-                        : "Komisi (Rp)"
-                    }
-                  >
-                    <input
-                      className={inputClass}
-                      type="number"
-                      min="0"
-                      value={commission}
-                      onChange={(e) =>
-                        setCommission(Math.max(0, Number(e.target.value)))
-                      }
-                    />
-                  </Field>
-                </div>
-                <div className="mt-3 flex justify-between text-xs">
-                  <span className="text-slate-500">Nilai komisi</span>
-                  <strong>{money(commissionAmount)}</strong>
                 </div>
               </div>
 

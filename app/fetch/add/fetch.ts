@@ -165,3 +165,20 @@ export const createOffer = async (data: CreateOfferPayload) => {
   return await axios.post("/api/create/create-offer", data);
 };
 
+export type CommissionPayload = {
+  user_id: string;
+  order_id?: string | number | null;
+  base_amount: number;
+  rate_applied: number;
+  commission_amount: number;
+  status?: string;
+  period_start?: string;
+  period_end?: string;
+  notes?: string | null;
+};
+
+export const createCommission = async (data: CommissionPayload) => {
+  return await axios.post("/api/create/create-commission", data);
+};
+
+
