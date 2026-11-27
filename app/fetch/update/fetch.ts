@@ -51,3 +51,7 @@ export const deleteOffer = async (id: string | number) => {
   return await axios.delete(`/api/get/get-offer/${id}`);
 };
 
+export const updateOrderCommissions = async (orderId: string | number) => {
+  return await axios.post("/api/update/update-order-commissions", { order_id: orderId });
+};
+

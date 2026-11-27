@@ -33,7 +33,9 @@ export async function GET(
         other_costs_orders(*),
         product_orders(*),
         complaint_schedules(*),
-        order_history(*)
+        order_history(*),
+        order_assignments(*),
+        partner_commissions(*)
       `
       )
       .eq("id", id)

@@ -460,12 +460,14 @@ export default function TaskPage() {
             <h1 className="text-base font-bold tracking-tight">Tugas Saya</h1>
             <p className="text-[10px] text-slate-500">{todayDateStr}</p>
           </div>
-          <Link
-            href="/order"
-            className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
-          >
-            Semua Order <ArrowRight className="h-3 w-3" />
-          </Link>
+          {currentUser?.role !== 3 && currentUser?.role !== 4 && (
+            <Link
+              href="/order"
+              className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
+            >
+              Semua Order <ArrowRight className="h-3 w-3" />
+            </Link>
+          )}
         </header>
 
         {/* Summary cards */}

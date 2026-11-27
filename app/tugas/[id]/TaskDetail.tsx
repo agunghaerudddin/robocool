@@ -9,6 +9,7 @@ import {
   updateOrderStatus,
   uploadOrderImage,
   updateOrderImage,
+  updateOrderCommissions,
 } from "@/app/fetch/update/fetch";
 import {
   createServiceOrder,
@@ -465,6 +466,13 @@ export default function TaskDetail() {
       setAdditionalPrice("");
       setAdditionalCapitalPrice("");
 
+      // Recalculate partner commission if any assigned technician is Mitra (role 4)
+      try {
+        await updateOrderCommissions(id);
+      } catch (commErr) {
+        console.warn("Gagal memperbarui komisi mitra:", commErr);
+      }
+
       // Refresh
       await fetchOrderDetail(id);
     } catch (err: any) {
@@ -858,7 +866,8 @@ export default function TaskDetail() {
         </section>
 
         {/* Additional services / spare parts */}
-        <section className="rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm">
+        {!isCompleted && (
+          <section className="rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm">
           <button
             type="button"
             onClick={() => setShowAdditional((value) => !value)}
@@ -1038,6 +1047,7 @@ export default function TaskDetail() {
             </div>
           )}
         </section>
+        )}
 
         {/* Payment */}
         <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
