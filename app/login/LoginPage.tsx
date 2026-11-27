@@ -24,14 +24,28 @@ export default function LoginDemo({ user }: LoginProps) {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) throw error;
 
-      router.replace("/dashboard");
+      let targetUrl = "/dashboard";
+      if (data?.user) {
+        const { data: dbUser } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+
+        const role = dbUser?.role;
+        if (role === 4) {
+          targetUrl = "/tugas";
+        }
+      }
+
+      router.replace(targetUrl);
       router.refresh();
     } catch (err) {
       setStatus(
